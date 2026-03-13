@@ -2,6 +2,7 @@
 .vscode/
 hack/
 nix/
+example/
 
 .envrc
 default.nix

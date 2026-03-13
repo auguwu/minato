@@ -1,0 +1,125 @@
+# 🐻‍❄️〽️ minato: Fast, simple way to extract Bazel targets into a JSON Compilation Database
+# Copyright (c) 2026 Noel <cutie@floofy.dev>, et al.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+name: CI
+on:
+    workflow_dispatch: {}
+    push:
+        branches:
+            - 'issues/gh-**'
+            - 'feat/**'
+            - master
+        paths-ignore:
+            - '.github/**'
+            - '.vscode/**'
+            - 'nix/**'
+
+            - CHANGELOG.md
+            - renovate.json
+            - flake.lock
+            - .envrc
+    pull_request:
+        types: [opened, synchronize]
+        branches:
+            - 'issues/gh-**'
+            - 'noel/**'
+            - 'feat/**'
+            - master
+        paths:
+            - '**'
+permissions:
+    contents: read
+    checks: write
+concurrency:
+    group: ${{github.workflow}}-${{github.ref}}
+    cancel-in-progress: true
+jobs:
+    cargo:
+        name: "Rust / Cargo [${{matrix.rust-version}}]"
+        runs-on: ${{matrix.runner}}
+        strategy:
+            matrix:
+                rust-version: [stable, nightly]
+                runner:
+                    - ubuntu-latest
+                    - windows-latest
+                    - macos-latest
+        steps:
+            - uses: actions/checkout@v6
+            - run: rm rust-toolchain.toml
+            - uses: dtolnay/rust-toolchain@master
+              with:
+                toolchain: ${{matrix.rust-version}}
+
+            - uses: rui314/setup-mold@v1
+              if: ${{matrix.runner == 'ubuntu-latest'}}
+
+            - if: ${{matrix.runner == 'ubuntu-latest'}}
+              run: echo "RUSTFLAGS=-fuse-ld=mold" >> $GITHUB_ENV
+
+            - uses: Swatinem/rust-cache@v2
+            - run: cargo build
+    clippy:
+        name: "Rust / Clippy [${{matrix.rust-version}}]"
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                rust-version: [stable, nightly]
+        steps:
+            - uses: actions/checkout@v6
+            - run: rm rust-toolchain.toml
+            - uses: dtolnay/rust-toolchain@master
+              with:
+                toolchain: ${{matrix.rust-version}}
+
+            - uses: rui314/setup-mold@v1
+            - run: echo "RUSTFLAGS=-fuse-ld=mold" >> $GITHUB_ENV
+            - uses: Swatinem/rust-cache@v2
+            - uses: auguwu/clippy-action@1.5.0
+              with:
+                token: ${{github.token}}
+    bazel:
+        name: "Rust / Bazel [${{matrix.bazel}}]"
+        runs-on: ${{matrix.runner}}
+        strategy:
+            matrix:
+                bazel: ["7.7.1", "8.6.0", "9.0.1"]
+                runner:
+                    - ubuntu-latest
+                    - windows-latest
+                    - macos-latest
+        env:
+            USE_BAZEL_VERSION: ${{matrix.bazel}}
+            BAZELFLAGS: "--config=ci"
+        steps:
+            - uses: actions/checkout@v6
+
+            # TODO(@auguwu/Noel): figure out cache for macOS and Windows
+            - uses: actions/cache@v5
+              if: ${{matrix.runner == 'ubuntu-latest'}}
+              with:
+                key: bazel-cache-linux-${{hashFiles('MODULE.bazel', 'BUILD.bazel', '.bazelrc')}}
+                restore-keys: bazel-cache-linux-
+                path: |
+                    ~/.cache/bazel
+                    ~/.cache/bazelisk
+
+            - run: bazel build ${{env.BAZELFLAGS}} //...
