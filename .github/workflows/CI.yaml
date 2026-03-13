@@ -73,7 +73,7 @@ jobs:
               if: ${{matrix.runner == 'ubuntu-latest'}}
 
             - if: ${{matrix.runner == 'ubuntu-latest'}}
-              run: echo "RUSTFLAGS=-fuse-ld=mold" >> $GITHUB_ENV
+              run: echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
 
             - uses: Swatinem/rust-cache@v2
             - run: cargo build
@@ -89,6 +89,7 @@ jobs:
             - uses: dtolnay/rust-toolchain@master
               with:
                 toolchain: ${{matrix.rust-version}}
+                components: clippy
 
             - uses: rui314/setup-mold@v1
             - run: echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
