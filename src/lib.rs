@@ -191,13 +191,18 @@ async fn get_workspace_root(bazel: &Path) -> eyre::Result<PathBuf> {
     ))
 }
 
-pub async fn extract(
-    targets: Vec<String>,
-    extra_flags: Vec<String>,
-) -> eyre::Result<Vec<CompilationDatabaseEntry>> {
+pub async fn extract(targets: Vec<String>) -> eyre::Result<Vec<CompilationDatabaseEntry>> {
     let Some(bazel) = find_bazel_binary()? else {
         return Err(eyre!("failed to find `bazel` binary"));
     };
+
+    let mut extra_flags = Vec::new();
+    if let Ok(mut data) =
+        env::var("MINATO_BAZEL_FLAGS").map(|s| s.split(';').map(ToOwned::to_owned).collect::<Vec<String>>()) &&
+        !data.is_empty()
+    {
+        extra_flags.append(&mut data);
+    }
 
     let workspace = get_workspace_root(bazel.as_path()).await?;
     info!(workspace = %workspace.display(), "using workspace folder");
@@ -207,6 +212,8 @@ pub async fn extract(
         let mut actions = extract_target(&bazel, &target, extra_flags.as_slice(), workspace.as_path()).await?;
         entries.append(&mut actions);
     }
+
+    entries.dedup_by(|a, b| a.file.eq_ignore_ascii_case(&b.file));
 
     info!(count = entries.len(), "extraction completed");
     Ok(entries)

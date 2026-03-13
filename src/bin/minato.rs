@@ -32,10 +32,6 @@ struct Args {
     #[facet(args::positional, default = vec!["//...".to_owned()])]
     targets: Vec<String>,
 
-    /// A set of extra arguments to pass when executing `bazel aquery`
-    #[facet(args::positional, default)]
-    args: Vec<String>,
-
     /// If provided, the directory to change into. Useful for testing.
     #[facet(args::named, args::short = 'd', default)]
     chdir: Option<PathBuf>,
@@ -101,12 +97,8 @@ fn main() -> eyre::Result<()> {
         .block_on(real_main(args))
 }
 
-async fn real_main(
-    Args {
-        targets, args, print, ..
-    }: Args,
-) -> eyre::Result<()> {
-    let compdb = minato::extract(targets, args).await?;
+async fn real_main(Args { targets, print, .. }: Args) -> eyre::Result<()> {
+    let compdb = minato::extract(targets).await?;
     if print {
         let mut stdout = std::io::stdout().lock();
         facet_json::to_writer_std_pretty(&mut stdout, &compdb).unwrap();

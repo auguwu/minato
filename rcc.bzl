@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Rules for wrapping the minato binary as a runnable Bazel target.
+"""Rules for wrapping the Minato binary as a runnable Bazel target.
 
 Minato extracts Bazel targets into a JSON Compilation Database
 (compile_commands.json) at the workspace root, enabling clangd and other
@@ -34,7 +34,7 @@ Load this file in your BUILD.bazel:
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 def minato(name, targets = [], args = [], env = {}):
-    """Defines a runnable target that invokes the minato binary.
+    """Defines a runnable target that invokes the Minato binary.
 
     Running `bazel run <name>` will execute minato over the specified targets
     and write `compile_commands.json` to the workspace root.
@@ -56,8 +56,7 @@ def minato(name, targets = [], args = [], env = {}):
         arguments += target
 
     if len(args) > 0:
-        arguments.append("--")
-        arguments += args
+        env["MINATO_BAZEL_FLAGS"] = env.get("MINATO_BAZEL_FLAGS", "") + ";".join(args)
 
     sh_binary(
         name = name,
@@ -66,5 +65,4 @@ def minato(name, targets = [], args = [], env = {}):
         deps = ["@rules_shell//shell/runfiles"],
         args = arguments,
         env = env,
-        use_bash_launcher = True,
     )
