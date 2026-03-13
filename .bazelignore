@@ -1,0 +1,9 @@
+.github/
+.vscode/
+hack/
+nix/
+
+.envrc
+default.nix
+shell.nix
+flake.nix

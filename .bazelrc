@@ -1,0 +1,51 @@
+# 🐻‍❄️〽️ minato: Fast, simple way to extract Bazel targets into a JSON Compilation Database
+# Copyright (c) 2026 Noel <cutie@floofy.dev>, et al.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+build:dbg --compilation_mode=dbg
+build:opt --compilation_mode=opt
+
+common --enable_platform_specific_config
+
+startup --windows_enable_symlinks
+build:windows --enable_runfiles
+
+# CI-based configuration
+test:ci --test_output=all
+common:ci --noshow_progress
+common:ci --verbose_failures
+
+## Rust
+### Use Bazel's C++ toolchain as the linker for Rust targets instead of relying
+### on a system linker being available in the sandbox (fixes macOS linker errors).
+build --@rules_rust//rust/settings:experimental_use_cc_common_link=True
+
+### https://github.com/bazelbuild/rules_rust/issues/3459
+build --@rules_rust//rust/settings:experimental_use_allocator_libraries_with_mangled_symbols=true
+
+build --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build --output_groups=+clippy_checks
+
+build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+build --output_groups=+rustfmt_checks
+build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
+
+# import .usr.bazelrc if it exists
+try-import %workspace%/.usr.bazelrc

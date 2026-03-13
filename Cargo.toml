@@ -1,0 +1,59 @@
+# 🐻‍❄️〽️ minato: Fast, simple way to extract Bazel targets into a JSON Compilation Database
+# Copyright (c) 2026 Noel <cutie@floofy.dev>, et al.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+[package]
+name = "minato"
+description = "🐻‍❄️〽️ Fast, simple way to extract Bazel targets into a JSON Compilation Database"
+version = "0.1.0"
+authors = ["Noel <cutie@floofy.dev>"]
+edition = "2024"
+repository = "https://github.com/auguwu/minato"
+
+[[bin]]
+name = "minato"
+path = "src/bin/minato.rs"
+
+[dependencies]
+color-eyre = { version = "0.6.5", features = ["issue-url"] }
+which = "7"
+eyre = "0.6.12"
+facet = "0.44.2"
+facet-json = "0.44.1"
+tokio = { version = "1.50.0", features = [
+    "signal",
+    "rt",
+    "process",
+    "io-std",
+    "macros",
+    "fs",
+] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+is_executable = "1.0.5"
+figue = "2.0.0"
+
+[profile.release]
+codegen-units = 1 # use a single codegen unit
+opt-level = "s"   # optimize for size
+panic = "abort"   # abort the process when a panic occurs
+strip = true      # strip all debug symbols
+debug = 0         # disable debug information
+lto = true        # perform LTO on all crates (even our own)

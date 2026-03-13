@@ -1,0 +1,53 @@
+# 🐻‍❄️〽️ minato: Fast, simple way to extract Bazel targets into a JSON Compilation Database
+# Copyright (c) 2026 Noel <cutie@floofy.dev>, et al.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+module(
+    name = "minato",
+    repo_name = "dev_floofy_minato",
+)
+
+bazel_dep(name = "rules_rust", version = "0.69.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+## Configure Rust toolchain
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    sha256s = {
+        "2026-03-12/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "1d914d2326027bb3d04aa73ba92b3a1f7a5e36bb09424e2540c3dafe2f6a5a69",
+        "2026-03-12/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz": "467de158c6c073a6eb81369ab273ea8afa36605b583f9c6c6dbe344d065784f7",
+        "2026-03-12/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz": "a379f3d075686b180e266e7294384db50f167b245f670f8c04d2fae4cc94704d",
+        "2026-03-12/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "b943cfdc7d878b1df3f27565a27af3bd21c77d18301e2fa7ae67c4dcaec44f4a",
+        "2026-03-12/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "95161aab04b336d0daa8d76f386af14bfa2b3486f2e72b1b17e3b644c67054e2",
+    },
+    versions = [
+        # keep in-sync with `rust-toolchain.toml`
+        "nightly/2026-03-12",
+    ],
+)
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+)
+use_repo(crate, "crates")

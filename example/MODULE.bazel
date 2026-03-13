@@ -1,0 +1,13 @@
+module(
+    name = "example",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+bazel_dep(name = "minato", dev_dependency = True)
+local_path_override(
+    module_name = "minato",
+    path = "..",
+)
