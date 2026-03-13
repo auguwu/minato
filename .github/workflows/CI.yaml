@@ -53,7 +53,7 @@ concurrency:
     cancel-in-progress: true
 jobs:
     cargo:
-        name: "Rust / Cargo [${{matrix.rust-version}}]"
+        name: "Rust / Cargo [${{matrix.rust-version}}: ${{matrix.runner}}]"
         runs-on: ${{matrix.runner}}
         strategy:
             matrix:
@@ -97,7 +97,7 @@ jobs:
               with:
                 token: ${{github.token}}
     bazel:
-        name: "Rust / Bazel [${{matrix.bazel}}]"
+        name: "Rust / Bazel [${{matrix.bazel}}: ${{matrix.runner}}]"
         runs-on: ${{matrix.runner}}
         strategy:
             matrix:
