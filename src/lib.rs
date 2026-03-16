@@ -29,8 +29,11 @@ use eyre::Context;
 use facet::Facet;
 use is_executable::IsExecutable;
 use std::{
+    collections::HashSet,
     env,
+    ffi::OsStr,
     path::{Path, PathBuf},
+    process::Stdio,
     str::FromStr,
 };
 use tokio::process::Command;
@@ -56,8 +59,40 @@ const SOURCE_EXTENSIONS: &[&str] = &[
     ".cu", ".cui",
 
     // Assembly (with C pre-processor)
-    ".s", ".asm", ".S"
+    ".s", ".asm", ".S",
+
+    // Headers
+    ".h", ".hh", ".hpp", ".hxx", ".h++"
 ];
+
+const HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS: phf::Map<&'static str, &'static str> = phf::phf_map! {
+    ".c" => "-xc",
+    ".i" => "-xc",
+    ".cc" => "-xc++",
+    ".cpp" => "-xc++",
+    ".cxx" => "-xc++",
+    ".c++" => "-xc++",
+    ".C" => "-xc++",
+    ".CC" => "-xc++",
+    ".cp" => "-xc++",
+    ".CPP" => "-xc++",
+    ".C++" => "-xc++",
+    ".CXX" => "-xc++",
+    ".ii" => "-xc++",
+    ".m" => "-xobjective-c",
+    ".mm" => "-xobjective-c++",
+    ".M" => "-xobjective-c++",
+    ".cu" => "-xcuda",
+    ".cui" => "-xcuda",
+    ".s" => "-xassembler",
+    ".asm" => "-xassembler",
+    ".S" => "-xassembler-with-cpp",
+    ".h" => "-xc-header",
+    ".hh" => "-xc++-header",
+    ".hpp" => "-xc++-header",
+    ".hxx" => "-xc++-header",
+    ".h++" => "-xc++-header"
+};
 
 #[derive(Facet)]
 struct AQueryOutput {
@@ -71,12 +106,51 @@ struct AQueryAction {
 }
 
 impl AQueryAction {
+    /// Create a synthetic action for a header file by cloning this action's arguments
+    /// but swapping the source file for `header`.
+    fn synthesize_for_header(&self, header: &str) -> AQueryAction {
+        let mut args = self.arguments.clone();
+        for arg in args.iter_mut().skip(1) {
+            if !arg.starts_with('-') && SOURCE_EXTENSIONS.iter().any(|ext| arg.ends_with(ext)) {
+                *arg = header.to_owned();
+                break;
+            }
+        }
+
+        AQueryAction {
+            mnemonic: self.mnemonic.clone(),
+            arguments: args,
+        }
+    }
+
     pub fn convert(&self, workspace: &Path) -> Option<CompilationDatabaseEntry> {
         let file = self.find_source_file()?;
+        let mut args = self.strip_compile_args();
+
+        // https://github.com/clangd/clangd/issues/1173
+        // https://github.com/clangd/clangd/issues/1263
+        if args.iter().any(|arg| {
+            !((arg.starts_with("-x") || arg.starts_with("--language")) ||
+                ["-objc", "-objc++", "/tc", "/tp"].contains(&arg.to_ascii_lowercase().as_str()))
+        }) {
+            if let Some(compiler) = self.arguments.first() &&
+                compiler.ends_with("cl.exe")
+            {
+                args.insert(1, "/TP".to_owned());
+            } else {
+                let path = PathBuf::from(&file);
+                let extension = path.extension().and_then(OsStr::to_str).unwrap_or_default();
+
+                if let Some(lang) = HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS.get(&format!(".{extension}")) {
+                    args.insert(1, lang.to_string());
+                }
+            }
+        }
+
         Some(CompilationDatabaseEntry {
             directory: workspace.display().to_string(),
             file,
-            arguments: self.strip_compile_args(),
+            arguments: args,
         })
     }
 
@@ -208,8 +282,12 @@ pub async fn extract(targets: Vec<String>) -> eyre::Result<Vec<CompilationDataba
     info!(workspace = %workspace.display(), "using workspace folder");
 
     let mut entries = Vec::new();
+    let mut fallback_args: Option<Vec<String>> = None;
     for target in targets {
-        let mut actions = extract_target(&bazel, &target, extra_flags.as_slice(), workspace.as_path()).await?;
+        let mut actions = extract_target(&bazel, &target, extra_flags.as_slice(), workspace.as_path(), fallback_args.as_deref()).await?;
+        if fallback_args.is_none() {
+            fallback_args = actions.first().map(|e| e.arguments.clone());
+        }
         entries.append(&mut actions);
     }
 
@@ -219,11 +297,88 @@ pub async fn extract(targets: Vec<String>) -> eyre::Result<Vec<CompilationDataba
     Ok(entries)
 }
 
+/// Convert a Bazel source-file label (`//pkg/sub:file.h`) to its absolute path.
+/// Labels from external repositories (`@repo//...`) are ignored.
+fn bazel_label_to_path(label: &str, workspace: &Path) -> Option<PathBuf> {
+    let label = label.trim();
+    if !label.starts_with("//") {
+        return None; // skip external repos (@...) and malformed labels
+    }
+
+    let label = &label[2..]; // strip leading "//"
+    let (pkg, file) = match label.find(':') {
+        Some(pos) => (&label[..pos], &label[pos + 1..]),
+        None => {
+            // No colon — treat the last path component as the file name.
+            let slash_pos = label.rfind('/')?;
+            (&label[..slash_pos], &label[slash_pos + 1..])
+        }
+    };
+
+    let mut path = workspace.to_path_buf();
+    for component in pkg.split('/') {
+        if !component.is_empty() {
+            path.push(component);
+        }
+    }
+
+    path.push(file);
+    Some(path)
+}
+
+/// Query Bazel for all files listed in `hdrs` attributes of transitive deps of `target`.
+/// Returns absolute paths to header files that live inside the workspace.
+async fn query_header_files(
+    bazel: &Path,
+    target: &str,
+    extra_flags: &[String],
+    workspace: &Path,
+) -> eyre::Result<Vec<PathBuf>> {
+    let expr = format!("labels(hdrs, deps({target}))");
+    debug!(%expr, %target, "running `bazel query` for header files...");
+
+    let output = Command::new(bazel)
+        .arg("query")
+        .arg(&expr)
+        .arg("--output=label")
+        .arg("--ui_event_filters=-info")
+        .arg("--noshow_progress")
+        .args(extra_flags)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .output()
+        .await
+        .context("failed to run `bazel query` for header files")?;
+
+    if !output.status.success() {
+        warn!("bazel query for header files failed; skipping header-only entries");
+        return Ok(Vec::new());
+    }
+
+    let text = String::from_utf8(output.stdout).context("`bazel query` output was not valid UTF-8")?;
+
+    Ok(text
+        .lines()
+        .filter_map(|line| bazel_label_to_path(line, workspace))
+        .filter(|p| {
+            p.extension()
+                .and_then(OsStr::to_str)
+                .map(|ext| {
+                    [".h", ".hh", ".hpp", ".hxx", ".h++"]
+                        .iter()
+                        .any(|hext| *hext == format!(".{ext}"))
+                })
+                .unwrap_or(false)
+        })
+        .collect())
+}
+
 async fn extract_target(
     bazel: &Path,
     target: &str,
     extra_flags: &[String],
     workspace: &Path,
+    fallback_args: Option<&[String]>,
 ) -> eyre::Result<Vec<CompilationDatabaseEntry>> {
     let expr = format!("mnemonic('(Objc|Cpp|Cuda)Compile', deps({target}))");
     debug!(%expr, %target, "running `bazel aquery`...");
@@ -232,26 +387,22 @@ async fn extract_target(
         .arg("aquery")
         .arg(&expr)
         .arg("--output=jsonproto")
+        .arg("--ui_event_filters=-info")
+        .arg("--noshow_progress")
         .arg("--include_artifacts=false") // We only need arguments, not artifact paths.
         .arg("--features=-compiler_param_file") // Expand param files so all flags are visible in `arguments`.
         .arg("--features=-layering_check") // Suppress layering-check actions that produce no source file.
+        .arg("--host_features=-compiler_param_file")
+        .arg("--host_features=-layering_check")
         .args(extra_flags)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
         .output()
         .await
         .context("failed to run `bazel aquery`")?;
 
     if !output.status.success() {
-        debug!(
-            "`bazel aquery` output :: stdout: {}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-
-        debug!(
-            "`bazel aquery` output :: stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        bail!("`bazel aquery` failed for target {}", target)
+        bail!("`bazel aquery` failed for target {}, view logs above", target)
     }
 
     let blob = String::from_utf8(output.stdout).context("`bazel aquery` output was not valid UTF-8")?;
@@ -262,12 +413,61 @@ async fn extract_target(
     info!(%target, actions = output.actions.len(), "processing compilation actions...");
     let mut entries = Vec::new();
 
-    for action in output.actions {
+    for action in &output.actions {
         match action.convert(workspace) {
             Some(entry) => entries.push(entry),
             None => {
                 warn!("skipping sourceless compilation action");
             }
+        }
+    }
+
+    // Header-only targets produce no compile actions, so we query their `hdrs`
+    // separately and synthesize entries using the first real action as a flag
+    // template. If this target has no actions, we fall back to args inherited
+    // from a previously processed target, or a bare `-x` entry as a last resort.
+    let hdr_paths = query_header_files(bazel, target, extra_flags, workspace).await?;
+    if !hdr_paths.is_empty() {
+        let existing: HashSet<String> = entries.iter().map(|e| e.file.clone()).collect();
+        let template = output.actions.first();
+        let mut added = 0usize;
+
+        for hdr_path in &hdr_paths {
+            let file = hdr_path.display().to_string();
+            if existing.contains(&file) {
+                continue;
+            }
+
+            let entry = if let Some(tmpl) = template {
+                tmpl.synthesize_for_header(&file).convert(workspace)
+            } else if let Some(fb) = fallback_args {
+                // No actions for this target — inherit flags from a previously seen action.
+                AQueryAction { mnemonic: String::new(), arguments: fb.to_vec() }
+                    .synthesize_for_header(&file)
+                    .convert(workspace)
+            } else {
+                // No compile actions anywhere — synthesize a bare minimal entry.
+                let ext = hdr_path.extension().and_then(OsStr::to_str).unwrap_or_default();
+                let lang_flag = HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS
+                    .get(&format!(".{ext}"))
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "-xc++-header".to_owned());
+
+                Some(CompilationDatabaseEntry {
+                    directory: workspace.display().to_string(),
+                    file: file.clone(),
+                    arguments: vec!["clang".to_owned(), lang_flag, file],
+                })
+            };
+
+            if let Some(e) = entry {
+                entries.push(e);
+                added += 1;
+            }
+        }
+
+        if added > 0 {
+            info!(%target, added, "added header-only entries");
         }
     }
 
