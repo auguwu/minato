@@ -35,8 +35,8 @@ path = "src/bin/minato.rs"
 color-eyre = { version = "0.6.5", features = ["issue-url"] }
 which = "8.0.2"
 eyre = "0.6.12"
-facet = "0.44.2"
-facet-json = "0.44.1"
+facet = "0.44.3"
+facet-json = "0.44.5"
 figue = "2.0.0"
 is_executable = "1.0.5"
 phf = { version = "0.13.1", features = ["macros"] }

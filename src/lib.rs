@@ -284,7 +284,14 @@ pub async fn extract(targets: Vec<String>) -> eyre::Result<Vec<CompilationDataba
     let mut entries = Vec::new();
     let mut fallback_args: Option<Vec<String>> = None;
     for target in targets {
-        let mut actions = extract_target(&bazel, &target, extra_flags.as_slice(), workspace.as_path(), fallback_args.as_deref()).await?;
+        let mut actions = extract_target(
+            &bazel,
+            &target,
+            extra_flags.as_slice(),
+            workspace.as_path(),
+            fallback_args.as_deref(),
+        )
+        .await?;
         if fallback_args.is_none() {
             fallback_args = actions.first().map(|e| e.arguments.clone());
         }
@@ -442,9 +449,12 @@ async fn extract_target(
                 tmpl.synthesize_for_header(&file).convert(workspace)
             } else if let Some(fb) = fallback_args {
                 // No actions for this target — inherit flags from a previously seen action.
-                AQueryAction { mnemonic: String::new(), arguments: fb.to_vec() }
-                    .synthesize_for_header(&file)
-                    .convert(workspace)
+                AQueryAction {
+                    mnemonic: String::new(),
+                    arguments: fb.to_vec(),
+                }
+                .synthesize_for_header(&file)
+                .convert(workspace)
             } else {
                 // No compile actions anywhere — synthesize a bare minimal entry.
                 let ext = hdr_path.extension().and_then(OsStr::to_str).unwrap_or_default();
