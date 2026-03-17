@@ -129,9 +129,9 @@ impl AQueryAction {
 
         // https://github.com/clangd/clangd/issues/1173
         // https://github.com/clangd/clangd/issues/1263
-        if args.iter().any(|arg| {
-            !((arg.starts_with("-x") || arg.starts_with("--language")) ||
-                ["-objc", "-objc++", "/tc", "/tp"].contains(&arg.to_ascii_lowercase().as_str()))
+        if !args.iter().any(|arg| {
+            (arg.starts_with("-x") || arg.starts_with("--language")) ||
+                ["-objc", "-objc++", "/tc", "/tp"].contains(&arg.to_ascii_lowercase().as_str())
         }) {
             if let Some(compiler) = self.arguments.first() &&
                 compiler.ends_with("cl.exe")
@@ -147,9 +147,12 @@ impl AQueryAction {
             }
         }
 
+        let ws = workspace.display().to_string();
+        let stripped = file.strip_prefix(&ws);
+
         Some(CompilationDatabaseEntry {
-            directory: workspace.display().to_string(),
-            file,
+            file: stripped.map(ToOwned::to_owned).unwrap_or(file),
+            directory: ws,
             arguments: args,
         })
     }
@@ -165,6 +168,7 @@ impl AQueryAction {
     fn strip_compile_args(&self) -> Vec<String> {
         let mut result = Vec::with_capacity(self.arguments.len());
         let mut skip_next = false;
+        let mut seen_isystems: HashSet<String> = HashSet::new();
 
         for arg in self.arguments.iter() {
             if skip_next {
@@ -177,6 +181,15 @@ impl AQueryAction {
                 "-o" | "-MF" => {
                     skip_next = true;
                     continue;
+                }
+
+                arg if arg.starts_with("-isystem") => {
+                    let path = unsafe { arg.strip_prefix("-isystem").unwrap_unchecked() };
+                    if !path.is_empty() && !seen_isystems.insert(path.to_owned()) {
+                        continue;
+                    }
+
+                    result.push(arg.to_owned());
                 }
 
                 _ => result.push(arg.to_owned()),
