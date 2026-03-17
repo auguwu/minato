@@ -404,7 +404,9 @@ async fn extract_target(
         .args(extra_flags)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .output()
+        .spawn()
+        .context("failed to run `bazel aquery`")?
+        .wait_with_output()
         .await
         .context("failed to run `bazel aquery`")?;
 
@@ -413,7 +415,6 @@ async fn extract_target(
     }
 
     let blob = String::from_utf8(output.stdout).context("`bazel aquery` output was not valid UTF-8")?;
-
     let output: AQueryOutput =
         facet_json::from_str(&blob).map_err(|e| eyre!("failed to parse aquery output: {e}"))?;
 
