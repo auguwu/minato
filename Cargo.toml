@@ -39,7 +39,7 @@ facet = "0.44.3"
 facet-json = "0.44.5"
 figue = "2.0.0"
 is_executable = "1.0.5"
-phf = { version = "0.13.1", features = ["macros"] }
+tempdir = "0.3.7"
 tokio = { version = "1.50.0", features = [
     "signal",
     "rt",

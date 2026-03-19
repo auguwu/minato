@@ -98,7 +98,7 @@ fn main() -> eyre::Result<()> {
 }
 
 async fn real_main(Args { targets, print, .. }: Args) -> eyre::Result<()> {
-    let compdb = minato::extract(targets).await?;
+    let compdb = minato::extract(targets.as_slice()).await?;
     if print {
         let mut stdout = std::io::stdout().lock();
         facet_json::to_writer_std_pretty(&mut stdout, &compdb).unwrap();

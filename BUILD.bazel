@@ -21,14 +21,18 @@
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
-exports_files([
-    "rustfmt.toml",
-    "tools/wrapper",
-])
+exports_files(
+    [
+        "rustfmt.toml",
+        "tools/wrapper",
+        "aspect.bzl",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 rust_library(
     name = "library",
-    srcs = ["src/lib.rs"],
+    srcs = glob(["src/*.rs"]),
     crate_name = "minato",
     crate_root = "src/lib.rs",
     edition = "2024",
@@ -38,7 +42,7 @@ rust_library(
         "@minato_pkgs//:facet",
         "@minato_pkgs//:facet-json",
         "@minato_pkgs//:is_executable",
-        "@minato_pkgs//:phf",
+        "@minato_pkgs//:tempdir",
         "@minato_pkgs//:tokio",
         "@minato_pkgs//:tracing",
         "@minato_pkgs//:which",

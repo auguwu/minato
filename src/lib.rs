@@ -25,475 +25,214 @@ extern crate tracing;
 #[macro_use]
 extern crate eyre;
 
-use eyre::Context;
+pub mod bazel;
+pub mod bep;
+pub mod compdb;
+
+use eyre::{Context, ContextCompat};
 use facet::Facet;
-use is_executable::IsExecutable;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env,
-    ffi::OsStr,
-    path::{Path, PathBuf},
+    io::ErrorKind,
+    path::PathBuf,
     process::Stdio,
-    str::FromStr,
 };
-use tokio::process::Command;
-use tracing::{info, warn};
-
-/// A list of source file extensions that identify a real compilation input (not a header
-/// being pre-compiled)
-#[rustfmt::skip]
-const SOURCE_EXTENSIONS: &[&str] = &[
-    // C
-    ".c", ".i",
-
-    // C++
-    ".cc", ".cpp", ".cxx", ".c++", ".C", ".CC", ".cp", ".CPP", ".C++", ".CXX", ".ii",
-
-    // Objective-C
-    ".m",
-
-    // Objective-C++
-    ".mm", ".M",
-
-    // CUDA
-    ".cu", ".cui",
-
-    // Assembly (with C pre-processor)
-    ".s", ".asm", ".S",
-
-    // Headers
-    ".h", ".hh", ".hpp", ".hxx", ".h++"
-];
-
-const HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS: phf::Map<&'static str, &'static str> = phf::phf_map! {
-    ".c" => "-xc",
-    ".i" => "-xc",
-    ".cc" => "-xc++",
-    ".cpp" => "-xc++",
-    ".cxx" => "-xc++",
-    ".c++" => "-xc++",
-    ".C" => "-xc++",
-    ".CC" => "-xc++",
-    ".cp" => "-xc++",
-    ".CPP" => "-xc++",
-    ".C++" => "-xc++",
-    ".CXX" => "-xc++",
-    ".ii" => "-xc++",
-    ".m" => "-xobjective-c",
-    ".mm" => "-xobjective-c++",
-    ".M" => "-xobjective-c++",
-    ".cu" => "-xcuda",
-    ".cui" => "-xcuda",
-    ".s" => "-xassembler",
-    ".asm" => "-xassembler",
-    ".S" => "-xassembler-with-cpp",
-    ".h" => "-xc-header",
-    ".hh" => "-xc++-header",
-    ".hpp" => "-xc++-header",
-    ".hxx" => "-xc++-header",
-    ".h++" => "-xc++-header"
-};
+use tokio::{fs, process::Command};
 
 #[derive(Facet)]
-struct AQueryOutput {
-    actions: Vec<AQueryAction>,
-}
-
-#[derive(Facet)]
-struct AQueryAction {
-    mnemonic: String,
+struct AspectEntry {
+    file: String,
     arguments: Vec<String>,
 }
 
-impl AQueryAction {
-    /// Create a synthetic action for a header file by cloning this action's arguments
-    /// but swapping the source file for `header`.
-    fn synthesize_for_header(&self, header: &str) -> AQueryAction {
-        let mut args = self.arguments.clone();
-        for arg in args.iter_mut().skip(1) {
-            if !arg.starts_with('-') && SOURCE_EXTENSIONS.iter().any(|ext| arg.ends_with(ext)) {
-                *arg = header.to_owned();
-                break;
-            }
-        }
+const FLAGS_ENV: &str = "MINATO_BAZEL_FLAGS";
 
-        AQueryAction {
-            mnemonic: self.mnemonic.clone(),
-            arguments: args,
-        }
-    }
+pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
+    let binary = bazel::find_binary()
+        .context("failed to find `bazel` binary")?
+        .context("no `bazel` binary found")?;
 
-    pub fn convert(&self, workspace: &Path) -> Option<CompilationDatabaseEntry> {
-        let file = self.find_source_file()?;
-        let mut args = self.strip_compile_args();
-
-        // https://github.com/clangd/clangd/issues/1173
-        // https://github.com/clangd/clangd/issues/1263
-        if !args.iter().any(|arg| {
-            (arg.starts_with("-x") || arg.starts_with("--language")) ||
-                ["-objc", "-objc++", "/tc", "/tp"].contains(&arg.to_ascii_lowercase().as_str())
-        }) {
-            if let Some(compiler) = self.arguments.first() &&
-                compiler.ends_with("cl.exe")
-            {
-                args.insert(1, "/TP".to_owned());
-            } else {
-                let path = PathBuf::from(&file);
-                let extension = path.extension().and_then(OsStr::to_str).unwrap_or_default();
-
-                if let Some(lang) = HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS.get(&format!(".{extension}")) {
-                    args.insert(1, lang.to_string());
-                }
-            }
-        }
-
-        let ws = workspace.display().to_string();
-        let stripped = file.strip_prefix(&ws);
-
-        Some(CompilationDatabaseEntry {
-            file: stripped.map(ToOwned::to_owned).unwrap_or(file),
-            directory: ws,
-            arguments: args,
-        })
-    }
-
-    fn find_source_file(&self) -> Option<String> {
-        self.arguments
-            .iter()
-            .skip(1)
-            .find(|arg| !arg.starts_with('-') && SOURCE_EXTENSIONS.iter().any(|ext| arg.ends_with(ext)))
-            .cloned()
-    }
-
-    fn strip_compile_args(&self) -> Vec<String> {
-        let mut result = Vec::with_capacity(self.arguments.len());
-        let mut skip_next = false;
-        let mut seen_isystems: HashSet<String> = HashSet::new();
-
-        for arg in self.arguments.iter() {
-            if skip_next {
-                skip_next = false;
-                continue;
-            }
-
-            match arg.as_str() {
-                "-c" => continue,
-                "-o" | "-MF" => {
-                    skip_next = true;
-                    continue;
-                }
-
-                arg if arg.starts_with("-isystem") => {
-                    let path = unsafe { arg.strip_prefix("-isystem").unwrap_unchecked() };
-                    if !path.is_empty() && !seen_isystems.insert(path.to_owned()) {
-                        continue;
-                    }
-
-                    result.push(arg.to_owned());
-                }
-
-                _ => result.push(arg.to_owned()),
-            }
-        }
-
-        result
-    }
-}
-
-/// A entry in a compilation database.
-#[derive(Debug, Facet)]
-pub struct CompilationDatabaseEntry {
-    /// The working directory of the compilation. All relative paths in
-    /// [`arguments`][Self::arguments] are relative to this.
-    pub directory: String,
-
-    /// The file itself.
-    pub file: String,
-
-    /// The arguments that is supplied to compile this single file.
-    pub arguments: Vec<String>,
-}
-
-pub fn find_bazel_binary() -> eyre::Result<Option<PathBuf>> {
-    if let Ok(bazel) = env::var("BAZEL").map(|x| unsafe {
-        // Safety: `PathBuf` will never return an error since the `FromStr`
-        // implementation's `Error` GAT is `Infalliable`.
-        PathBuf::from_str(&x).unwrap_unchecked()
-    }) {
-        debug!("bazel binary: lookup with `$BAZEL` environment variable");
-        if bazel.is_file() {
-            if !bazel.is_executable() {
-                bail!("`bazel` binary in [{}] is not executable", bazel.display());
-            }
-
-            return Ok(Some(bazel));
-        }
-
-        bail!("`bazel` binary in [{}] was not a real file", bazel.display());
-    }
-
-    for candidate in ["bazelisk", "bazel"] {
-        debug!(candidate, "bazel binary: lookup from `$PATH`");
-        if let Ok(bazel) = which::which(candidate) {
-            if bazel.is_file() {
-                if !bazel.is_executable() {
-                    bail!("binary lookup `{}`: not executable", bazel.display());
-                }
-
-                return Ok(Some(bazel));
-            }
-
-            bail!("binary lookup `{}`: not a real file", bazel.display());
-        }
-    }
-
-    Ok(None)
-}
-
-async fn get_workspace_root(bazel: &Path) -> eyre::Result<PathBuf> {
-    let output = Command::new(bazel)
-        .args(["info", "workspace"])
-        .output()
-        .await
-        .context("failed to run `bazel info workspace`")?;
-
-    if !output.status.success() {
-        debug!(
-            "`bazel info workspace` output :: stdout: {}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-
-        debug!(
-            "`bazel info workspace` output :: stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        bail!("`bazel info workspace` failed");
-    }
-
-    Ok(PathBuf::from(
-        String::from_utf8(output.stdout)
-            .context("`bazel info workspace` produced non UTF-8 output")
-            .map(|s| s.trim().to_owned())?,
-    ))
-}
-
-pub async fn extract(targets: Vec<String>) -> eyre::Result<Vec<CompilationDatabaseEntry>> {
-    let Some(bazel) = find_bazel_binary()? else {
-        return Err(eyre!("failed to find `bazel` binary"));
-    };
-
-    let mut extra_flags = Vec::new();
+    let mut flags = Vec::new();
     if let Ok(mut data) =
-        env::var("MINATO_BAZEL_FLAGS").map(|s| s.split(';').map(ToOwned::to_owned).collect::<Vec<String>>()) &&
+        env::var(FLAGS_ENV).map(|s| s.split([';', ':']).map(ToOwned::to_owned).collect::<Vec<String>>()) &&
         !data.is_empty()
     {
-        extra_flags.append(&mut data);
+        flags.append(&mut data);
     }
 
-    let workspace = get_workspace_root(bazel.as_path()).await?;
-    info!(workspace = %workspace.display(), "using workspace folder");
-
-    let mut entries = Vec::new();
-    let mut fallback_args: Option<Vec<String>> = None;
-    for target in targets {
-        let mut actions = extract_target(
-            &bazel,
-            &target,
-            extra_flags.as_slice(),
-            workspace.as_path(),
-            fallback_args.as_deref(),
-        )
-        .await?;
-        if fallback_args.is_none() {
-            fallback_args = actions.first().map(|e| e.arguments.clone());
-        }
-        entries.append(&mut actions);
-    }
-
-    entries.dedup_by(|a, b| a.file.eq_ignore_ascii_case(&b.file));
-
-    info!(count = entries.len(), "extraction completed");
-    Ok(entries)
-}
-
-/// Convert a Bazel source-file label (`//pkg/sub:file.h`) to its absolute path.
-/// Labels from external repositories (`@repo//...`) are ignored.
-fn bazel_label_to_path(label: &str, workspace: &Path) -> Option<PathBuf> {
-    let label = label.trim();
-    if !label.starts_with("//") {
-        return None; // skip external repos (@...) and malformed labels
-    }
-
-    let label = &label[2..]; // strip leading "//"
-    let (pkg, file) = match label.find(':') {
-        Some(pos) => (&label[..pos], &label[pos + 1..]),
-        None => {
-            // No colon — treat the last path component as the file name.
-            let slash_pos = label.rfind('/')?;
-            (&label[..slash_pos], &label[slash_pos + 1..])
-        }
-    };
-
-    let mut path = workspace.to_path_buf();
-    for component in pkg.split('/') {
-        if !component.is_empty() {
-            path.push(component);
-        }
-    }
-
-    path.push(file);
-    Some(path)
-}
-
-/// Query Bazel for all files listed in `hdrs` attributes of transitive deps of `target`.
-/// Returns absolute paths to header files that live inside the workspace.
-async fn query_header_files(
-    bazel: &Path,
-    target: &str,
-    extra_flags: &[String],
-    workspace: &Path,
-) -> eyre::Result<Vec<PathBuf>> {
-    let expr = format!("labels(hdrs, deps({target}))");
-    debug!(%expr, %target, "running `bazel query` for header files...");
-
-    let output = Command::new(bazel)
-        .arg("query")
-        .arg(&expr)
-        .arg("--output=label")
-        .arg("--ui_event_filters=-info")
-        .arg("--noshow_progress")
-        .args(extra_flags)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .output()
+    let workspace_folder = bazel::run_command(&binary, ["info", "workspace"], /*inherit_stderr=*/ false)
         .await
-        .context("failed to run `bazel query` for header files")?;
+        .map(PathBuf::from)?;
 
-    if !output.status.success() {
-        warn!("bazel query for header files failed; skipping header-only entries");
-        return Ok(Vec::new());
+    let output_base = bazel::run_command(&binary, ["info", "output_base"], /*inherit_stderr=*/ false)
+        .await
+        .map(PathBuf::from)?;
+
+    // Check if `external/` is symlinked (or junction'd) to the workspace folder
+    let external = workspace_folder.join("external");
+    match tokio::fs::symlink_metadata(&external).await {
+        Ok(meta) if !meta.is_symlink() => {
+            warn!(path = %external.display(), "deleting path as `external` will be symlinked");
+            let _ = if meta.is_file() {
+                tokio::fs::remove_file(&external).await
+            } else {
+                tokio::fs::remove_dir_all(&external).await
+            };
+        }
+
+        Err(err) if err.kind() == ErrorKind::NotFound => {
+            let output_external = output_base.join("external");
+            if let Err(err) = tokio::fs::symlink(&output_external, &external).await {
+                warn!(error = %err, "failed to symlink {} => {}", output_external.display(), external.display());
+            } else {
+                info!("symlinked {} => {}", output_external.display(), external.display());
+            }
+        }
+
+        Err(err) => {
+            warn!(error = %err, "failed to collect symlink metadata for path [{}]", external.display());
+        }
+
+        _ => {}
     }
 
-    let text = String::from_utf8(output.stdout).context("`bazel query` output was not valid UTF-8")?;
+    let mut db = compdb::Db::new();
+    info!("running bazel aspect...");
 
-    Ok(text
-        .lines()
-        .filter_map(|line| bazel_label_to_path(line, workspace))
-        .filter(|p| {
-            p.extension()
-                .and_then(OsStr::to_str)
-                .map(|ext| {
-                    [".h", ".hh", ".hpp", ".hxx", ".h++"]
-                        .iter()
-                        .any(|hext| *hext == format!(".{ext}"))
-                })
-                .unwrap_or(false)
-        })
-        .collect())
-}
+    let tempfile = tempdir::TempDir::new("minato")?;
+    let bep_path = tempfile.path().join("bep.json");
 
-async fn extract_target(
-    bazel: &Path,
-    target: &str,
-    extra_flags: &[String],
-    workspace: &Path,
-    fallback_args: Option<&[String]>,
-) -> eyre::Result<Vec<CompilationDatabaseEntry>> {
-    let expr = format!("mnemonic('(Objc|Cpp|Cuda)Compile', deps({target}))");
-    debug!(%expr, %target, "running `bazel aquery`...");
-
-    let output = Command::new(bazel)
-        .arg("aquery")
-        .arg(&expr)
-        .arg("--output=jsonproto")
-        .arg("--ui_event_filters=-info")
-        .arg("--noshow_progress")
-        .arg("--include_artifacts=false") // We only need arguments, not artifact paths.
-        .arg("--features=-compiler_param_file") // Expand param files so all flags are visible in `arguments`.
-        .arg("--features=-layering_check") // Suppress layering-check actions that produce no source file.
-        .arg("--host_features=-compiler_param_file")
-        .arg("--host_features=-layering_check")
-        .args(extra_flags)
-        .stdout(Stdio::piped())
+    let status = Command::new(&binary)
+        .arg("build")
+        .args(targets)
+        .args([
+            "--aspects=@minato//:aspect.bzl%minato_aspect",
+            "--output_groups=db,required_inputs",
+            "--noshow_progress",
+            "--ui_event_filters=-info",
+        ])
+        .arg(format!("--build_event_json_file={}", bep_path.display()))
+        .args(&flags)
+        .stdout(Stdio::null())
+        .stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .spawn()
-        .context("failed to run `bazel aquery`")?
-        .wait_with_output()
+        .context("failed to spawn `bazel build`")?
+        .wait()
         .await
-        .context("failed to run `bazel aquery`")?;
+        .context("failed to wait for child to finish")?;
 
-    if !output.status.success() {
-        bail!("`bazel aquery` failed for target {}, view logs above", target)
+    if !status.success() {
+        bail!("`bazel build` with aspects failed, view logs above");
     }
 
-    let blob = String::from_utf8(output.stdout).context("`bazel aquery` output was not valid UTF-8")?;
-    let output: AQueryOutput =
-        facet_json::from_str(&blob).map_err(|e| eyre!("failed to parse aquery output: {e}"))?;
+    let content = fs::read_to_string(&bep_path)
+        .await
+        .context("failed to read BEP output")?;
 
-    info!(%target, actions = output.actions.len(), "processing compilation actions...");
-    let mut entries = Vec::new();
+    let output_files = collect_bep_output_files(&content);
+    info!(files = output_files.len(), "found aspect output files");
 
-    for action in &output.actions {
-        match action.convert(workspace) {
-            Some(entry) => entries.push(entry),
-            None => {
-                warn!("skipping sourceless compilation action");
-            }
-        }
-    }
-
-    // Header-only targets produce no compile actions, so we query their `hdrs`
-    // separately and synthesize entries using the first real action as a flag
-    // template. If this target has no actions, we fall back to args inherited
-    // from a previously processed target, or a bare `-x` entry as a last resort.
-    let hdr_paths = query_header_files(bazel, target, extra_flags, workspace).await?;
-    if !hdr_paths.is_empty() {
-        let existing: HashSet<String> = entries.iter().map(|e| e.file.clone()).collect();
-        let template = output.actions.first();
-        let mut added = 0usize;
-
-        for hdr_path in &hdr_paths {
-            let file = hdr_path.display().to_string();
-            if existing.contains(&file) {
+    let ws = workspace_folder.display().to_string();
+    for path in &output_files {
+        let content = match tokio::fs::read_to_string(path).await {
+            Ok(c) => c,
+            Err(err) => {
+                warn!(error = %err, path = %path.display(), "failed to read aspect output file");
                 continue;
             }
+        };
 
-            let entry = if let Some(tmpl) = template {
-                tmpl.synthesize_for_header(&file).convert(workspace)
-            } else if let Some(fb) = fallback_args {
-                // No actions for this target — inherit flags from a previously seen action.
-                AQueryAction {
-                    mnemonic: String::new(),
-                    arguments: fb.to_vec(),
-                }
-                .synthesize_for_header(&file)
-                .convert(workspace)
-            } else {
-                // No compile actions anywhere — synthesize a bare minimal entry.
-                let ext = hdr_path.extension().and_then(OsStr::to_str).unwrap_or_default();
-                let lang_flag = HDR_SOURCE_EXTENSION_TO_LANGUAGE_ARGS
-                    .get(&format!(".{ext}"))
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "-xc++-header".to_owned());
-
-                Some(CompilationDatabaseEntry {
-                    directory: workspace.display().to_string(),
-                    file: file.clone(),
-                    arguments: vec!["clang".to_owned(), lang_flag, file],
-                })
-            };
-
-            if let Some(e) = entry {
-                entries.push(e);
-                added += 1;
+        let aspect_entries: Vec<AspectEntry> = match facet_json::from_str(&content) {
+            Ok(v) => v,
+            Err(err) => {
+                warn!(error = %err, "failed to parse aspect output");
+                continue;
             }
-        }
+        };
 
-        if added > 0 {
-            info!(%target, added, "added header-only entries");
+        for ae in aspect_entries {
+            db.push(compdb::Entry {
+                directory: ws.clone(),
+                file: ae.file,
+                arguments: ae.arguments,
+            });
         }
     }
 
-    Ok(entries)
+    db.sort_by_key(|a| a.file.to_ascii_lowercase());
+    db.dedup_by(|a, b| a.file.eq_ignore_ascii_case(&b.file));
+
+    info!(count = db.len(), "extraction completed");
+    Ok(db)
+}
+
+fn collect_bep_output_files(bep_content: &str) -> Vec<PathBuf> {
+    let mut named_sets: HashMap<String, bep::NamedSetOfFiles> = HashMap::new();
+    let mut output_set_ids: Vec<String> = Vec::new();
+
+    for line in bep_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let event: bep::Event = match facet_json::from_str(trimmed) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        if let (Some(id), Some(ns)) = (event.id, event.named_set_of_files) {
+            if let Some(ns_ref) = id.named_set {
+                named_sets.insert(ns_ref.id, ns);
+            }
+        } else if let Some(completed) = event.completed {
+            for group in completed.output_groups {
+                if group.name == "db" {
+                    for fs in group.file_sets {
+                        output_set_ids.push(fs.id);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut file_paths = Vec::new();
+    let mut visited = HashSet::new();
+
+    for id in &output_set_ids {
+        collect_named_set_files(&named_sets, id, &mut file_paths, &mut visited);
+    }
+
+    file_paths
+}
+
+fn collect_named_set_files(
+    named_sets: &HashMap<String, bep::NamedSetOfFiles>,
+    set_id: &str,
+    result: &mut Vec<PathBuf>,
+    visited: &mut HashSet<String>,
+) {
+    if !visited.insert(set_id.to_owned()) {
+        return;
+    }
+
+    let Some(set) = named_sets.get(set_id) else {
+        return;
+    };
+
+    // Collect what we need before the recursive calls to satisfy the borrow checker.
+    let uris: Vec<String> = set.files.iter().map(|f| f.uri.clone()).collect();
+    let child_ids: Vec<String> = set.file_sets.iter().map(|r| r.id.clone()).collect();
+
+    for uri in uris {
+        // BEP URIs look like "file:///abs/path"; strip the scheme to get the path.
+        let path = uri.strip_prefix("file://").unwrap_or(&uri).to_owned();
+        result.push(PathBuf::from(path));
+    }
+
+    for child_id in child_ids {
+        collect_named_set_files(named_sets, &child_id, result, visited);
+    }
 }
