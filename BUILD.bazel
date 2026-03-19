@@ -42,7 +42,7 @@ rust_library(
         "@minato_pkgs//:facet",
         "@minato_pkgs//:facet-json",
         "@minato_pkgs//:is_executable",
-        "@minato_pkgs//:tempdir",
+        "@minato_pkgs//:tempfile",
         "@minato_pkgs//:tokio",
         "@minato_pkgs//:tracing",
         "@minato_pkgs//:which",

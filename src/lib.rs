@@ -100,7 +100,7 @@ pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
     let mut db = compdb::Db::new();
     info!("running bazel aspect...");
 
-    let tempfile = tempdir::TempDir::new("minato")?;
+    let tempfile = tempfile::TempDir::new()?;
     let bep_path = tempfile.path().join("bep.json");
 
     let status = Command::new(&binary)
