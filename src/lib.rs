@@ -83,7 +83,16 @@ pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
 
         Err(err) if err.kind() == ErrorKind::NotFound => {
             let output_external = output_base.join("external");
+
+            #[cfg(unix)]
             if let Err(err) = tokio::fs::symlink(&output_external, &external).await {
+                warn!(error = %err, "failed to symlink {} => {}", output_external.display(), external.display());
+            } else {
+                info!("symlinked {} => {}", output_external.display(), external.display());
+            }
+
+            #[cfg(windows)]
+            if let Err(err) = tokio::fs::symlink_dir(&output_external, &external).await {
                 warn!(error = %err, "failed to symlink {} => {}", output_external.display(), external.display());
             } else {
                 info!("symlinked {} => {}", output_external.display(), external.display());
