@@ -77,6 +77,7 @@ _EXT_TO_X_FLAG = {
 
 _SRC_EXTS = ["c", "i", "cc", "cpp", "cxx", "c++", "ii", "m", "mm", "cu", "s", "asm", "S"]
 _HDR_EXTS = ["h", "hh", "hpp", "hxx", "h++"]
+_CXX_EXTS = ["cc", "cpp", "cxx", "c++", "ii", "mm", "cu"]
 
 CompileCommandInfo = provider(
     "Transitive compile command fragment files produced by the minato aspect.",
@@ -180,14 +181,27 @@ def _aspect_impl(target, ctx):
     )
 
     compilation_context = target[CcInfo].compilation_context
-    is_cxx = "++" in toolchain.compiler_executable
 
-    # Per-rule copts/cxxopts with Make-variable expansion.
-    extra_flags = []
+    # Global copts/cxxopts/conlyopts from --copt/--cxxopt/--conlyopt (including --config expansions).
+    global_copts = list(ctx.fragments.cpp.copts)
+    global_cxxopts = list(ctx.fragments.cpp.cxxopts)
+    global_conlyopts = list(ctx.fragments.cpp.conlyopts)
+
+    # Per-rule copts/cxxopts/conlyopts with Make-variable expansion.
+    rule_copts = []
     if hasattr(ctx.rule.attr, "copts"):
-        extra_flags += _expand_copts(ctx, ctx.rule.attr.copts, "copts")
-    if is_cxx and hasattr(ctx.rule.attr, "cxxopts"):
-        extra_flags += _expand_copts(ctx, ctx.rule.attr.cxxopts, "cxxopts")
+        rule_copts = _expand_copts(ctx, ctx.rule.attr.copts, "copts")
+
+    rule_cxxopts = []
+    if hasattr(ctx.rule.attr, "cxxopts"):
+        rule_cxxopts = _expand_copts(ctx, ctx.rule.attr.cxxopts, "cxxopts")
+
+    rule_conlyopts = []
+    if hasattr(ctx.rule.attr, "conlyopts"):
+        rule_conlyopts = _expand_copts(ctx, ctx.rule.attr.conlyopts, "conlyopts")
+
+    c_extra_flags = global_copts + global_conlyopts + rule_copts + rule_conlyopts
+    cxx_extra_flags = global_copts + global_cxxopts + rule_copts + rule_cxxopts
 
     srcs = []
     if hasattr(ctx.rule.attr, "srcs"):
@@ -212,14 +226,15 @@ def _aspect_impl(target, ctx):
 
     entries = []
     for file in srcs:
+        ext = file.extension
         entries.append(_make_compilation_entry(
             toolchain,
             feature_configuration,
             compilation_context,
             file,
-            _EXTENSION_TO_ACTION.get(file.extension, CPP_COMPILE_ACTION_NAME),
-            _EXT_TO_X_FLAG.get(file.extension, "-xc++"),
-            extra_flags,
+            _EXTENSION_TO_ACTION.get(ext, CPP_COMPILE_ACTION_NAME),
+            _EXT_TO_X_FLAG.get(ext, "-xc++"),
+            cxx_extra_flags if ext in _CXX_EXTS else c_extra_flags,
         ))
 
     for file in hdrs:
@@ -230,7 +245,7 @@ def _aspect_impl(target, ctx):
             file,
             CPP_COMPILE_ACTION_NAME,
             None,  # auto-detect C vs C++ based on toolchain / -std= flags
-            extra_flags,
+            cxx_extra_flags,  # include cxxopts so -std= detection works
         ))
 
     fragment = ctx.actions.declare_file("%s_db.json" % ctx.label.name)
