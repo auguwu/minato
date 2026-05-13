@@ -19,12 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 exports_files(
     [
         "rustfmt.toml",
-        "tools/wrapper",
         "aspect.bzl",
     ],
     visibility = ["//visibility:public"],
@@ -66,4 +66,68 @@ rust_binary(
         "@minato_pkgs//:tracing",
         "@minato_pkgs//:tracing-subscriber",
     ],
+)
+
+cc_binary(
+    name = "rcc",
+    srcs = select({
+        "@platforms//os:linux": ["//tools/wrapper:unix.cc"],
+        "@platforms//os:macos": ["//tools/wrapper:unix.cc"],
+        "@platforms//os:windows": ["//tools/wrapper:windows.cc"],
+    }),
+    args = ["--unsafe-aspect-file=//:aspect.bzl"],
+    copts = select({
+        "@rules_cc//cc/compiler:msvc-cl": [
+            "/Os",  # optimize for speed
+            "/EHs-c-",  # disable C & C++ exceptions
+            "/GR-",  # disable RTTI
+            "/std:c++latest",  # use latest C++
+            "/NODEFAULTLIB:msvcrt.lib",
+            "/DWIN32_LEAN_AND_MEAN=1",
+            "/D_CRT_SECURE_NO_WARNINGS",
+        ],
+        "@rules_cc//cc/compiler:clang": [
+            "-fdiagnostics-color=always",
+            "-std=c++26",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Wmost",
+            "-Wconversion-null",
+            "-Wmissing-declarations",
+            "-Wnon-virtual-dtor",
+            "-Wundef",
+            "-Wunused-local-typedef",
+            "-Wunused-result",
+            "-Wvarargs",
+            "-Wno-comma",
+            "-Wno-conversion",
+            "-Wno-gcc-compat",
+            "-Wno-gnu-statement-expression",
+            "-Wno-c2y-extensions",
+            "-Wno-c++23-extensions",
+            "-Wno-c++26-extensions",
+            "-Wno-unused-command-line-argument",
+        ],
+        "@rules_cc//cc/compiler:gcc": [
+            "-fdiagnostics-color=always",
+            "-std=c++26",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Wconversion-null",
+            "-Wmissing-declarations",
+            "-Wnon-virtual-dtor",
+            "-Wundef",
+            "-Wunused-local-typedefs",
+            "-Wunused-result",
+            "-Wvarargs",
+            "-Wno-conversion",
+            "-Wno-pragmas",
+        ],
+        "//conditions:default": [],
+    }),
+    data = [":minato"],
+    visibility = [":__pkg__"],
+    deps = ["@rules_cc//cc/runfiles"],
 )

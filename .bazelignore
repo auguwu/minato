@@ -3,6 +3,7 @@
 hack/
 nix/
 example/
+.direnv/
 
 .envrc
 default.nix

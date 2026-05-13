@@ -22,22 +22,44 @@
   mkShell,
   lib,
   stdenv,
+  stdenvAdapters,
   ## rust
   rust-bin,
   cargo-nextest,
   cargo-machete,
   cargo-expand,
   cargo-deny,
+  ## c++
+  llvmPackages_22,
   ## bazel
   bazel_8,
   bazel-buildtools,
   ## os-specific
   ### linux
   mold,
-  lldb,
 }: let
+  llvm = llvmPackages_22;
+  clang-tools = llvm.clang-tools.override {
+    enableLibcxx = true;
+  };
+
+  llvmStdenv =
+    (
+      if stdenv.hostPlatform.isLinux
+      then stdenvAdapters.useMoldLinker
+      else lib.id
+    )
+    llvm.libcxxStdenv;
+
   packages =
     [
+      llvm.compiler-rt
+      llvm.libcxx
+
+      llvm.bintools
+      llvm.lldb
+      clang-tools
+
       cargo-nextest
       cargo-machete
       cargo-expand
@@ -48,10 +70,19 @@
       bazel-buildtools
       bazel_8
     ]
-    ++ (lib.optionals stdenv.isLinux [mold lldb]);
+    ++ (lib.optionals stdenv.isLinux [mold]);
+
+  mkShell' = mkShell.override {
+    stdenv = llvmStdenv;
+  };
 in
-  mkShell {
+  mkShell' {
     inherit packages;
 
     name = "minato-dev";
+    shellHook = ''
+      export BAZEL_COPTS="-I${llvm.compiler-rt.dev}/include"
+      export BAZEL_CXXOPTS="-xc++:-nostdinc++:-isystem:${llvm.libcxx.dev}/include/c++/v1"
+      export BAZEL_LINKOPTS="-L${llvm.libcxx}/lib:-lc++:-lc++abi"
+    '';
   }

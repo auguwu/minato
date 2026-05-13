@@ -49,6 +49,8 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
 
         env: Dictionary of environment variables made available to the binary
             at runtime.
+
+        visibility: the visibility of the `cc_binary` target
     """
 
     all_args = []
@@ -72,18 +74,54 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
         args = all_args,
         copts = select({
             "@rules_cc//cc/compiler:msvc-cl": [
-                "/Os", # optimize for speed
-                "/EHs-c-", # disable C & C++ exceptions
-                "/GR-", # disable RTTI
-                "/std:c++latest", # use latest C++
+                "/Os",  # optimize for speed
+                "/EHs-c-",  # disable C & C++ exceptions
+                "/GR-",  # disable RTTI
+                "/std:c++latest",  # use latest C++
                 "/NODEFAULTLIB:msvcrt.lib",
                 "/DWIN32_LEAN_AND_MEAN=1",
-                "/D_CRT_SECURE_NO_WARNINGS"
+                "/D_CRT_SECURE_NO_WARNINGS",
             ],
-            "@rules_cc//cc/compiler:clang-cl": [],
-            "@rules_cc//cc/compiler:clang": [],
-            "@rules_cc//cc/compiler:gcc": [],
-            "//conditions:default": []
+            "@rules_cc//cc/compiler:clang": [
+                "-fdiagnostics-color=always",
+                "-std=c++26",
+                "-Wall",
+                "-Wextra",
+                "-Wpedantic",
+                "-Wmost",
+                "-Wconversion-null",
+                "-Wmissing-declarations",
+                "-Wnon-virtual-dtor",
+                "-Wundef",
+                "-Wunused-local-typedef",
+                "-Wunused-result",
+                "-Wvarargs",
+                "-Wno-comma",
+                "-Wno-conversion",
+                "-Wno-gcc-compat",
+                "-Wno-gnu-statement-expression",
+                "-Wno-c2y-extensions",
+                "-Wno-c++23-extensions",
+                "-Wno-c++26-extensions",
+                "-Wno-unused-command-line-argument",
+            ],
+            "@rules_cc//cc/compiler:gcc": [
+                "-fdiagnostics-color=always",
+                "-std=c++26",
+                "-Wall",
+                "-Wextra",
+                "-Wpedantic",
+                "-Wconversion-null",
+                "-Wmissing-declarations",
+                "-Wnon-virtual-dtor",
+                "-Wundef",
+                "-Wunused-local-typedefs",
+                "-Wunused-result",
+                "-Wvarargs",
+                "-Wno-conversion",
+                "-Wno-pragmas",
+            ],
+            "//conditions:default": [],
         }),
-        visibility = visibility
+        visibility = visibility,
     )

@@ -19,34 +19,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-build:dbg --compilation_mode=dbg
-build:opt --compilation_mode=opt
-
-common --enable_platform_specific_config
-
-startup --windows_enable_symlinks
-build:windows --enable_runfiles
-
-# CI-based configuration
-test:ci --test_output=all
-common:ci --noshow_progress
-common:ci --verbose_failures
-
-## Rust
-### Use Bazel's C++ toolchain as the linker for Rust targets instead of relying
-### on a system linker being available in the sandbox (fixes macOS linker errors).
-build:macos --@rules_rust//rust/settings:experimental_use_cc_common_link=True
-build:linux --@rules_rust//rust/settings:experimental_use_cc_common_link=True
-
-### https://github.com/bazelbuild/rules_rust/issues/3459
-build --@rules_rust//rust/settings:experimental_use_allocator_libraries_with_mangled_symbols=true
-
-build --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
-build --output_groups=+clippy_checks
-
-build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
-build --output_groups=+rustfmt_checks
-build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
-
-# import .usr.bazelrc if it exists
-try-import %workspace%/.usr.bazelrc
+---
+Language: Cpp
+BasedOnStyle: WebKit
+Standard: Latest
+ColumnLimit: 120
+SpaceBeforeInheritanceColon: false
+SpaceInEmptyBlock: false
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: false
+SpaceBeforeRangeBasedForLoopColon: false
+BreakTemplateDeclarations: Yes
+FixNamespaceComments: true
+RequiresClausePosition: OwnLine
+SpaceAfterTemplateKeyword: false
+AllowShortFunctionsOnASingleLine: Empty
+PPIndentWidth: 4
+AllowShortEnumsOnASingleLine: false
+EnumTrailingComma: Remove
+...
