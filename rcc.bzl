@@ -27,13 +27,12 @@ LSP-based tools to provide accurate code intelligence for C/C++/ObjC/CUDA
 sources.
 
 Load this file in your BUILD.bazel:
-
     load("@minato//:rcc.bzl", "minato")
 """
 
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-def minato(name, targets = [], args = [], env = {}):
+def minato(name, targets = [], args = [], env = {}, visibility = []):
     """Defines a runnable target that invokes the Minato binary.
 
     Running `bazel run <name>` will execute minato over the specified targets
@@ -44,25 +43,47 @@ def minato(name, targets = [], args = [], env = {}):
         targets: List of Bazel target patterns to extract compile commands from
             (e.g. `["//..."]`, `["//my/pkg:lib"]`). Defaults to all targets
             (`//...`) when left empty, which is minato's own default.
+
         args: Extra arguments forwarded to the minato binary after a `--`
             separator (e.g. `["--config=dbg"]`).
+
         env: Dictionary of environment variables made available to the binary
             at runtime.
     """
 
-    arguments = []
-    for target in targets:
-        # buildifier: disable=list-append
-        arguments += target
-
+    all_args = []
     if len(args) > 0:
         env["MINATO_BAZEL_FLAGS"] = env.get("MINATO_BAZEL_FLAGS", "") + ";".join(args)
 
-    sh_binary(
+    for k, v in env.items():
+        all_args.append("--env={}={}".format(k, v))
+
+    all_args += targets
+
+    cc_binary(
         name = name,
-        srcs = ["@minato//:tools/wrapper"],
+        srcs = select({
+            "@platforms//os:linux": ["@minato//tools/wrapper:unix.cc"],
+            "@platforms//os:macos": ["@minato//tools/wrapper:unix.cc"],
+            "@platforms//os:windows": ["@minato//tools/wrapper:windows.cc"],
+        }),
         data = ["@minato"],
-        deps = ["@rules_shell//shell/runfiles"],
-        args = arguments,
-        env = env,
+        deps = ["@rules_cc//cc/runfiles"],
+        args = all_args,
+        copts = select({
+            "@rules_cc//cc/compiler:msvc-cl": [
+                "/Os", # optimize for speed
+                "/EHs-c-", # disable C & C++ exceptions
+                "/GR-", # disable RTTI
+                "/std:c++latest", # use latest C++
+                "/NODEFAULTLIB:msvcrt.lib",
+                "/DWIN32_LEAN_AND_MEAN=1",
+                "/D_CRT_SECURE_NO_WARNINGS"
+            ],
+            "@rules_cc//cc/compiler:clang-cl": [],
+            "@rules_cc//cc/compiler:clang": [],
+            "@rules_cc//cc/compiler:gcc": [],
+            "//conditions:default": []
+        }),
+        visibility = visibility
     )

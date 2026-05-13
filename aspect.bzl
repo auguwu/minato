@@ -46,8 +46,6 @@ _EXTENSION_TO_ACTION = {
     "ii": CPP_COMPILE_ACTION_NAME,
     "m": OBJC_COMPILE_ACTION_NAME,
     "mm": OBJCPP_COMPILE_ACTION_NAME,
-
-    # CUDA has no dedicated action name in @bazel_tools; CPP_COMPILE is the closest.
     "cu": CPP_COMPILE_ACTION_NAME,
     "s": ASSEMBLE_ACTION_NAME,
     "asm": ASSEMBLE_ACTION_NAME,
@@ -75,6 +73,26 @@ _EXT_TO_X_FLAG = {
     "h++": "-xc++-header",
 }
 
+# MSVC only distinguishes C vs C++. Assembly is handled by ml/ml64, not cl.
+# Headers have no direct compilation mode; empty string means "omit the flag".
+_EXT_TO_X_FLAG_MSVC = {
+    "c": "/Tc",
+    "i": "/Tc",
+    "cc": "/Tp",
+    "cpp": "/Tp",
+    "cxx": "/Tp",
+    "c++": "/Tp",
+    "ii": "/Tp",
+    "s": "",
+    "asm": "",
+    "S": "",
+    "h": "",
+    "hh": "",
+    "hpp": "",
+    "hxx": "",
+    "h++": "",
+}
+
 _SRC_EXTS = ["c", "i", "cc", "cpp", "cxx", "c++", "ii", "m", "mm", "cu", "s", "asm", "S"]
 _HDR_EXTS = ["h", "hh", "hpp", "hxx", "h++"]
 _CXX_EXTS = ["cc", "cpp", "cxx", "c++", "ii", "mm", "cu"]
@@ -90,6 +108,10 @@ CompileCommandInfo = provider(
 def _expand_copts(ctx, flags, attr_name):
     return [ctx.expand_make_variables(attr_name, flag, {}) for flag in flags]
 
+def _is_msvc(toolchain):
+    """Returns True when the toolchain drives an MSVC-style compiler (cl.exe or clang-cl)."""
+    return toolchain.compiler == "msvc-cl" or toolchain.compiler == "clang-cl"
+
 def _make_compilation_entry(
         toolchain,
         feature_configuration,
@@ -97,7 +119,8 @@ def _make_compilation_entry(
         file,
         action,
         x,
-        extra_flags):
+        extra_flags,
+        msvc):
     variables = cc_common.create_compile_variables(
         feature_configuration = feature_configuration,
         cc_toolchain = toolchain,
@@ -119,30 +142,50 @@ def _make_compilation_entry(
     )
 
     arguments = list(command)
+
     if x == None:
-        # Auto-detect C vs C++ for plain `.h` headers based on the toolchain or
-        # a `-std=` flag already present in the command line.
-        has_cxx_std_flag = any([
-            arg.startswith("-std=c++") or arg.startswith("--std=c++") or
-            arg.startswith("-std=gnu++") or arg.startswith("--std=gnu++")
-            for arg in arguments
-        ])
+        # Auto-detect C vs C++ for plain `.h` headers based on the toolchain
+        # or a standard-version flag already present in the command line.
+        if msvc:
+            has_cxx_std_flag = any([
+                arg.startswith("/std:c++")
+                for arg in arguments
+            ])
 
-        is_cxx_compiler = "++" in toolchain.compiler_executable
-        x = "-xc++-header" if (has_cxx_std_flag or is_cxx_compiler) else "-xc-header"
+            is_cxx_compiler = "++" in toolchain.compiler_executable
+            x = "/Tp" if (has_cxx_std_flag or is_cxx_compiler) else "/Tc"
+        else:
+            has_cxx_std_flag = any([
+                arg.startswith("-std=c++") or arg.startswith("--std=c++") or
+                arg.startswith("-std=gnu++") or arg.startswith("--std=gnu++")
+                for arg in arguments
+            ])
 
-    return {
-        "file": file.path,
-        "arguments": [
-            toolchain.compiler_executable,
-            x,
-        ] + arguments,
-    }
+            is_cxx_compiler = "++" in toolchain.compiler_executable
+            x = "-xc++-header" if (has_cxx_std_flag or is_cxx_compiler) else "-xc-header"
+
+    if msvc:
+        if x:
+            # /Tp and /Tc must appear before the filename. The filename is
+            # already the last element in `arguments` from
+            # get_memory_inefficient_command_line, so insert the flag just
+            # before it.
+            return {
+                "file": file.path,
+                "arguments": [toolchain.compiler_executable] + arguments[:-1] + [x, arguments[-1]],
+            }
+        else:
+            return {
+                "file": file.path,
+                "arguments": [toolchain.compiler_executable] + arguments,
+            }
+    else:
+        return {
+            "file": file.path,
+            "arguments": [toolchain.compiler_executable, x] + arguments,
+        }
 
 def _aspect_impl(target, ctx):
-    # Always accumulate transitive fragments and required inputs from deps so the
-    # provider propagates through the full dependency graph regardless of whether
-    # this target is a CC target.
     transitive_files = []
     transitive_required = []
     for attr in ["deps", "implementation_deps"]:
@@ -165,6 +208,8 @@ def _aspect_impl(target, ctx):
         ]
 
     toolchain = find_cc_toolchain(ctx)
+    msvc = _is_msvc(toolchain)
+
     unsupported_features = list(ctx.disabled_features)
     for feat in ["layering_check", "compiler_param_file"]:
         if feat not in unsupported_features:
@@ -174,20 +219,15 @@ def _aspect_impl(target, ctx):
         ctx = ctx,
         cc_toolchain = toolchain,
         requested_features = ctx.features,
-
-        # Disable layering_check (no source-file actions) and compiler_param_file
-        # (expand all flags inline so the JSON is self-contained).
         unsupported_features = unsupported_features,
     )
 
     compilation_context = target[CcInfo].compilation_context
 
-    # Global copts/cxxopts/conlyopts from --copt/--cxxopt/--conlyopt (including --config expansions).
     global_copts = list(ctx.fragments.cpp.copts)
     global_cxxopts = list(ctx.fragments.cpp.cxxopts)
     global_conlyopts = list(ctx.fragments.cpp.conlyopts)
 
-    # Per-rule copts/cxxopts/conlyopts with Make-variable expansion.
     rule_copts = []
     if hasattr(ctx.rule.attr, "copts"):
         rule_copts = _expand_copts(ctx, ctx.rule.attr.copts, "copts")
@@ -203,6 +243,8 @@ def _aspect_impl(target, ctx):
     c_extra_flags = global_copts + global_conlyopts + rule_copts + rule_conlyopts
     cxx_extra_flags = global_copts + global_cxxopts + rule_copts + rule_cxxopts
 
+    x_flag_map = _EXT_TO_X_FLAG_MSVC if msvc else _EXT_TO_X_FLAG
+
     srcs = []
     if hasattr(ctx.rule.attr, "srcs"):
         for label in ctx.rule.attr.srcs:
@@ -210,10 +252,6 @@ def _aspect_impl(target, ctx):
                 if file.extension in _SRC_EXTS:
                     srcs.append(file)
 
-    # Collect header files separately. Generated headers (e.g. from a genrule
-    # used as `hdrs = [":header_gen"]`) are tracked in `required_inputs` so the
-    # caller can request them as an output group, ensuring Bazel materialises them
-    # on disk before clangd tries to use the compdb.
     hdrs = []
     required_inputs = []
     if hasattr(ctx.rule.attr, "hdrs"):
@@ -233,8 +271,9 @@ def _aspect_impl(target, ctx):
             compilation_context,
             file,
             _EXTENSION_TO_ACTION.get(ext, CPP_COMPILE_ACTION_NAME),
-            _EXT_TO_X_FLAG.get(ext, "-xc++"),
+            x_flag_map.get(ext, "/Tp" if msvc else "-xc++"),
             cxx_extra_flags if ext in _CXX_EXTS else c_extra_flags,
+            msvc,
         ))
 
     for file in hdrs:
@@ -244,8 +283,9 @@ def _aspect_impl(target, ctx):
             compilation_context,
             file,
             CPP_COMPILE_ACTION_NAME,
-            None,  # auto-detect C vs C++ based on toolchain / -std= flags
-            cxx_extra_flags,  # include cxxopts so -std= detection works
+            None,
+            cxx_extra_flags,
+            msvc,
         ))
 
     fragment = ctx.actions.declare_file("%s_db.json" % ctx.label.name)

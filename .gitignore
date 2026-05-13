@@ -134,3 +134,6 @@ Cargo.lock
 
 .direnv/
 !Cargo.lock
+**/.cache
+external
+compile_commands.json

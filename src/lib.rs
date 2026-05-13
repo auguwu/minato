@@ -48,7 +48,7 @@ struct AspectEntry {
 
 const FLAGS_ENV: &str = "MINATO_BAZEL_FLAGS";
 
-pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
+pub async fn extract(targets: &[String], aspect: Option<String>) -> eyre::Result<compdb::Db> {
     let binary = bazel::find_binary()
         .context("failed to find `bazel` binary")?
         .context("no `bazel` binary found")?;
@@ -115,12 +115,12 @@ pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
     let status = Command::new(&binary)
         .arg("build")
         .args(targets)
-        .args([
-            "--aspects=@minato//:aspect.bzl%minato_aspect",
-            "--output_groups=db,required_inputs",
-            "--noshow_progress",
-            "--ui_event_filters=-info",
-        ])
+        .arg(
+            aspect
+                .map(|p| format!("--aspects={p}%minato_aspect"))
+                .unwrap_or_else(|| String::from("--aspects=@minato//:aspect.bzl%minato_aspect")),
+        )
+        .args(["--output_groups=db,required_inputs", "--noshow_progress", "--ui_event_filters=-info"])
         .arg(format!("--build_event_json_file={}", bep_path.display()))
         .args(&flags)
         .stdout(Stdio::null())
@@ -144,11 +144,23 @@ pub async fn extract(targets: &[String]) -> eyre::Result<compdb::Db> {
     info!(files = output_files.len(), "found aspect output files");
 
     let ws = workspace_folder.display().to_string();
-    for path in &output_files {
-        let content = match tokio::fs::read_to_string(path).await {
+    for path in output_files {
+        let normalized = dunce::canonicalize(if cfg!(windows) {
+            let s = path.to_string_lossy();
+            // Strip leading `/` before a drive letter
+            if s.starts_with('/') && s.chars().nth(2) == Some(':') {
+                PathBuf::from(&s[1..])
+            } else {
+                path.to_path_buf()
+            }
+        } else {
+            path.to_path_buf()
+        })?;
+
+        let content = match tokio::fs::read_to_string(&normalized).await {
             Ok(c) => c,
             Err(err) => {
-                warn!(error = %err, path = %path.display(), "failed to read aspect output file");
+                warn!(error = %err, path = %normalized.display(), "failed to read aspect output file");
                 continue;
             }
         };

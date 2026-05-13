@@ -41,6 +41,9 @@ struct Args {
     #[facet(args::named, args::short = 'p', default = false)]
     print: bool,
 
+    #[facet(args::named)]
+    unsafe_aspect_file: Option<String>,
+
     #[facet(flatten)]
     builtins: args::FigueBuiltins,
 }
@@ -97,8 +100,15 @@ fn main() -> eyre::Result<()> {
         .block_on(real_main(args))
 }
 
-async fn real_main(Args { targets, print, .. }: Args) -> eyre::Result<()> {
-    let compdb = minato::extract(targets.as_slice()).await?;
+async fn real_main(
+    Args {
+        targets,
+        print,
+        unsafe_aspect_file,
+        ..
+    }: Args,
+) -> eyre::Result<()> {
+    let compdb = minato::extract(targets.as_slice(), unsafe_aspect_file).await?;
     if print {
         let mut stdout = std::io::stdout().lock();
         facet_json::to_writer_std_pretty(&mut stdout, &compdb).unwrap();

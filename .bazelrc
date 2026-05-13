@@ -35,7 +35,7 @@ common:ci --verbose_failures
 ## Rust
 ### Use Bazel's C++ toolchain as the linker for Rust targets instead of relying
 ### on a system linker being available in the sandbox (fixes macOS linker errors).
-build --@rules_rust//rust/settings:experimental_use_cc_common_link=True
+build:macos --@rules_rust//rust/settings:experimental_use_cc_common_link=True
 
 ### https://github.com/bazelbuild/rules_rust/issues/3459
 build --@rules_rust//rust/settings:experimental_use_allocator_libraries_with_mangled_symbols=true

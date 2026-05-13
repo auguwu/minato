@@ -38,6 +38,7 @@ rust_library(
     edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
+        "@minato_pkgs//:dunce",
         "@minato_pkgs//:eyre",
         "@minato_pkgs//:facet",
         "@minato_pkgs//:facet-json",
