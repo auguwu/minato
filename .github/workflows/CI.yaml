@@ -63,6 +63,7 @@ jobs:
                     - windows-2025
                     - macos-26
         steps:
+            - run: git config --global core.autocrlf false
             - uses: actions/checkout@v6
             - run: rm rust-toolchain.toml
             - uses: dtolnay/rust-toolchain@master
@@ -84,6 +85,7 @@ jobs:
             matrix:
                 rust-version: [stable, nightly]
         steps:
+            - run: git config --global core.autocrlf false
             - uses: actions/checkout@v6
             - run: rm rust-toolchain.toml
             - uses: dtolnay/rust-toolchain@master
@@ -111,16 +113,12 @@ jobs:
             USE_BAZEL_VERSION: ${{matrix.bazel}}
             BAZELFLAGS: "--config=ci"
         steps:
+            - run: git config --global core.autocrlf false
             - uses: actions/checkout@v6
-
-            # TODO(@auguwu/Noel): figure out cache for macOS and Windows
-            - uses: actions/cache@v5
-              if: ${{matrix.runner == 'ubuntu-latest'}}
+            - uses: bazel-contrib/setup-bazel@0.19.0
               with:
-                key: bazel-cache-linux-${{hashFiles('MODULE.bazel', 'BUILD.bazel', '.bazelrc')}}
-                restore-keys: bazel-cache-linux-
-                path: |
-                    ~/.cache/bazel
-                    ~/.cache/bazelisk
+                bazelisk-cache: true
+                repository-cache: true
+                disk-cache: bazel-diskcache-${{matrix.runner}}
 
             - run: bazel build ${{env.BAZELFLAGS}} //...
