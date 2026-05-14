@@ -23,16 +23,17 @@
 
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <print>
 #include <string>
-#include <sys/stat.h>
 #include <utility>
 #include <vector>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-#if (defined(__has_include) && __has_include(<TargetConditionals.h>))
+#if defined(__has_include) && __has_include(<TargetConditionals.h>)
 #include <TargetConditionals.h>
 
 #if TARGET_OS_MAC && TARGET_OS_OSX

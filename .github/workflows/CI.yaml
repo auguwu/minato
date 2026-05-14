@@ -122,4 +122,5 @@ jobs:
                     ~/.cache/bazel
                     ~/.cache/bazelisk
 
+            - run: sudo apt update && sudo apt install -y gcc-14 g++-14
             - run: bazel build ${{env.BAZELFLAGS}} //...
