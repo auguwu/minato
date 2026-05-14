@@ -102,10 +102,10 @@ jobs:
         runs-on: ${{matrix.runner}}
         strategy:
             matrix:
-                bazel: ["7.7.1", "8.6.0", "9.0.1"]
+                bazel: ["7.7.1", "8.6.0", "9.1.0"]
                 runner:
-                    - ubuntu-latest
-                    - macos-latest
+                    - ubuntu-24.04
+                    - macos-26
         env:
             USE_BAZEL_VERSION: ${{matrix.bazel}}
             BAZELFLAGS: "--config=ci"
@@ -123,4 +123,6 @@ jobs:
                     ~/.cache/bazelisk
 
             - run: sudo apt update && sudo apt install -y gcc-14 g++-14
+              if: ${{matrix.runner == 'ubuntu-24.04'}}
+
             - run: bazel build ${{env.BAZELFLAGS}} //...
