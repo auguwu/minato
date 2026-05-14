@@ -59,9 +59,9 @@ jobs:
             matrix:
                 rust-version: [stable, nightly]
                 runner:
-                    - ubuntu-latest
-                    - windows-latest
-                    - macos-latest
+                    - ubuntu-24.04
+                    - windows-2025
+                    - macos-26
         steps:
             - uses: actions/checkout@v6
             - run: rm rust-toolchain.toml
@@ -98,13 +98,14 @@ jobs:
               with:
                 token: ${{github.token}}
     bazel:
-        name: "Rust / Bazel [${{matrix.bazel}}: ${{matrix.runner}}]"
+        name: "Bazel [${{matrix.bazel}}: ${{matrix.runner}}]"
         runs-on: ${{matrix.runner}}
         strategy:
             matrix:
                 bazel: ["7.7.1", "8.6.0", "9.1.0"]
                 runner:
                     - ubuntu-24.04
+                    - windows-2025
                     - macos-26
         env:
             USE_BAZEL_VERSION: ${{matrix.bazel}}
@@ -121,8 +122,5 @@ jobs:
                 path: |
                     ~/.cache/bazel
                     ~/.cache/bazelisk
-
-            - run: sudo apt update && sudo apt install -y gcc-14 g++-14
-              if: ${{matrix.runner == 'ubuntu-24.04'}}
 
             - run: bazel build ${{env.BAZELFLAGS}} //...

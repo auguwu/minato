@@ -84,7 +84,7 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
             ],
             "@rules_cc//cc/compiler:clang": [
                 "-fdiagnostics-color=always",
-                "-std=c++26",
+                "-std=c++20",
                 "-Wall",
                 "-Wextra",
                 "-Wpedantic",
@@ -107,7 +107,7 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
             ],
             "@rules_cc//cc/compiler:gcc": [
                 "-fdiagnostics-color=always",
-                "-std=c++26",
+                "-std=c++20",
                 "-Wall",
                 "-Wextra",
                 "-Wpedantic",
