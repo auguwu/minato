@@ -24,7 +24,8 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
-#include <print>
+#include <format>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -74,12 +75,15 @@ auto tryExists(const std::string& path) -> std::pair<bool, int>
 
 } // namespace
 
+#define eprintln(fmt, ...) ::std::cerr << ::std::format(fmt __VA_OPT__(, ) __VA_ARGS__) << '\n'
+#define println(fmt, ...) ::std::cout << ::std::format(fmt __VA_OPT__(, ) __VA_ARGS__) << '\n'
+
 auto main(int argc, char** argv) -> int
 {
     std::string error;
     auto* runfiles = rules_cc::cc::runfiles::Runfiles::Create(argv[0], &error);
     if (!error.empty()) {
-        std::println(stderr, "failed to create runfiles: {}", error);
+        eprintln("failed to create runfiles: {}", error);
         return 1;
     }
 
@@ -89,7 +93,7 @@ auto main(int argc, char** argv) -> int
         if (!found.empty()) {
             auto [exists, error] = tryExists(found);
             if (!exists && error != 0) {
-                std::println(stderr, "warning: failed to probe file [{}]: {}", found, ::strerror(error));
+                eprintln("warning: failed to probe file [{}]: {}", found, ::strerror(error));
                 continue;
             }
 
@@ -101,7 +105,7 @@ auto main(int argc, char** argv) -> int
     }
 
     if (minato.empty()) {
-        std::println(stderr, "failed to find `minato` binary from runfiles");
+        eprintln("failed to find `minato` binary from runfiles");
         return 1;
     }
 
@@ -121,7 +125,7 @@ auto main(int argc, char** argv) -> int
             auto kv = arg.substr(6); // "--env="
             auto eq = kv.find('=');
             if (eq == std::string::npos) {
-                std::println(stderr, "malformed `--env` flag: {}", arg);
+                eprintln("malformed `--env` flag: {}", arg);
                 return 1;
             }
 
@@ -136,6 +140,6 @@ auto main(int argc, char** argv) -> int
     fwdArgs.push_back(nullptr);
     ::execv(minato.c_str(), fwdArgs.data());
 
-    std::println(stderr, "failed to exec minato: {}", ::strerror(errno));
+    eprintln("failed to exec minato: {}", ::strerror(errno));
     return 1;
 }
