@@ -26,7 +26,7 @@ module(
 
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_rust", version = "0.70.0")
-bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "rules_cc", version = "0.2.19")
 
 ## Configure Rust toolchain
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
