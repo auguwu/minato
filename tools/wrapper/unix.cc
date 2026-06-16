@@ -91,13 +91,13 @@ auto main(int argc, char** argv) -> int
     for (const auto* possible: kPossibleLocations) {
         auto found = runfiles->Rlocation(possible);
         if (!found.empty()) {
-            auto [exists, error] = tryExists(found);
-            if (!exists && error != 0) {
+            auto [doesExist, error] = tryExists(found);
+            if (!doesExist && error != 0) {
                 eprintln("warning: failed to probe file [{}]: {}", found, ::strerror(error));
                 continue;
             }
 
-            if (exists) {
+            if (doesExist) {
                 minato = found;
                 break;
             }
