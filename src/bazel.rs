@@ -89,10 +89,10 @@ pub async fn run_command(
         .context("failed to run bazel command")?;
 
     if !output.status.success() {
-        bail!("command failed; view logs above")
+        return Err(eyre!("command failed; view logs above"));
     }
 
     String::from_utf8(output.stdout)
         .map(|s| s.trim().to_owned())
-        .context("produced non UTF-8 output")
+        .context("standard output produced non UTF-8 output")
 }

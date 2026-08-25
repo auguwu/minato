@@ -3,6 +3,15 @@
     "editor.formatOnSave": true,
     "rust-analyzer.check.command": "clippy",
     "rust-analyzer.showUnlinkedFileNotification": false,
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/bazel-*": true,
+        "**/external": true
+    },
 
     "[starlark]": {
         "editor.defaultFormatter": "BazelBuild.vscode-bazel"

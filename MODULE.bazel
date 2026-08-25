@@ -25,33 +25,35 @@ module(
 )
 
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "rules_rust", version = "0.70.0")
-bazel_dep(name = "rules_cc", version = "0.2.19")
+bazel_dep(name = "rules_rust", version = "0.73.0")
+bazel_dep(name = "rules_cc", version = "0.2.22")
+
+_RUST_VERSION = "2026-08-25"
 
 ## Configure Rust toolchain
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
     sha256s = {
-        "2026-03-12/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "1d914d2326027bb3d04aa73ba92b3a1f7a5e36bb09424e2540c3dafe2f6a5a69",
-        "2026-03-12/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz": "467de158c6c073a6eb81369ab273ea8afa36605b583f9c6c6dbe344d065784f7",
-        "2026-03-12/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz": "a379f3d075686b180e266e7294384db50f167b245f670f8c04d2fae4cc94704d",
-        "2026-03-12/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "b943cfdc7d878b1df3f27565a27af3bd21c77d18301e2fa7ae67c4dcaec44f4a",
-        "2026-03-12/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "95161aab04b336d0daa8d76f386af14bfa2b3486f2e72b1b17e3b644c67054e2",
-        "2026-03-12/rustc-nightly-x86_64-pc-windows-msvc.tar.xz": "0e9eaa1cc7959b3365ff913e5faf931bf48dfd8e2cf1b82341df5a2e6408867a",
-        "2026-03-12/clippy-nightly-x86_64-pc-windows-msvc.tar.xz": "6ba46d04d5d063a6899bcaa759d401831a1cbbb5de86f22c12272bcd497059d7",
-        "2026-03-12/cargo-nightly-x86_64-pc-windows-msvc.tar.xz": "a0dee11e62de942e2f717736acc2b8e165b361c9ff819ad79724889684443200",
-        "2026-03-12/llvm-tools-nightly-x86_64-pc-windows-msvc.tar.xz": "f0802f703c0f2430c8fda2882c7d75d5525a73bc1999f883a7e5f86e6b247b70",
-        "2026-03-12/rust-std-nightly-x86_64-pc-windows-msvc.tar.xz": "405167ec9bb2dc5ff24ea23e0fdb3ebccfdf739773ae7c4c45815ce81fff6bb8",
-        "2026-03-12/rustc-nightly-aarch64-apple-darwin.tar.xz": "e9072b1b8b219bca75c29fa3891858ccf1f103ff98a27c2cea4894b2cd7ce27b",
-        "2026-03-12/clippy-nightly-aarch64-apple-darwin.tar.xz": "073c0ad7b79649b6a3b382e4c0bdbd2dc1bd20cf322fee5bd58045faef67dffc",
-        "2026-03-12/cargo-nightly-aarch64-apple-darwin.tar.xz": "bc38ddc59ce0e8b007767132a1c3bda8d6be61cc01134519cf31d690e3d9a6c5",
-        "2026-03-12/llvm-tools-nightly-aarch64-apple-darwin.tar.xz": "5892877f305ddc7915472e6e4bf6f47a31eace5d038bebae6ad48827968943fb",
-        "2026-03-12/rust-std-nightly-aarch64-apple-darwin.tar.xz": "e6baebe0e6e9ab84a89c863b81eb41c26df541dd5816447e3bd9da83994727de",
+        ("%s/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz" % _RUST_VERSION): "eb1c795ac9948ed837a542ec12abf3a0cd12af7ae5eeeded34f242aa4d8c8dcd",
+        ("%s/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz" % _RUST_VERSION): "6396ee6825a8a1e4a6fc0acc40addfa5087b22087be9cdd2bd26cb4fdefafcf6",
+        ("%s/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz" % _RUST_VERSION): "35ef31215d6b6952d095c6ff81a391d885b232a3e5ae74380bc856eddd315ac5",
+        ("%s/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz" % _RUST_VERSION): "f4e3681e7752476546e487fad4abc9ad127cab03443ca658d9527edcab4b3d1a",
+        ("%s/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz" % _RUST_VERSION): "6264111d3265a8ab7679779e409c48ccf07baa9e4c81752d4c5ebd71334fd4ca",
+        ("%s/rustc-nightly-x86_64-pc-windows-msvc.tar.xz" % _RUST_VERSION): "",
+        ("%s/clippy-nightly-x86_64-pc-windows-msvc.tar.xz" % _RUST_VERSION): "",
+        ("%s/cargo-nightly-x86_64-pc-windows-msvc.tar.xz" % _RUST_VERSION): "",
+        ("%s/llvm-tools-nightly-x86_64-pc-windows-msvc.tar.xz" % _RUST_VERSION): "",
+        ("%s/rust-std-nightly-x86_64-pc-windows-msvc.tar.xz" % _RUST_VERSION): "",
+        ("%s/rustc-nightly-aarch64-apple-darwin.tar.xz" % _RUST_VERSION): "",
+        ("%s/clippy-nightly-aarch64-apple-darwin.tar.xz" % _RUST_VERSION): "",
+        ("%s/cargo-nightly-aarch64-apple-darwin.tar.xz" % _RUST_VERSION): "",
+        ("%s/llvm-tools-nightly-aarch64-apple-darwin.tar.xz" % _RUST_VERSION): "",
+        ("%s/rust-std-nightly-aarch64-apple-darwin.tar.xz" % _RUST_VERSION): "",
     },
     versions = [
         # keep in-sync with `rust-toolchain.toml`
-        "nightly/2026-03-12",
+        ("nightly/%s" % _RUST_VERSION),
     ],
 )
 
@@ -59,6 +61,7 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(
     name = "minato_pkgs",
     cargo_lockfile = "//:Cargo.lock",
+    lockfile = "//:Cargo.bazel.lock",
     manifests = ["//:Cargo.toml"],
 )
 use_repo(crate, "minato_pkgs")

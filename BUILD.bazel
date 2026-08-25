@@ -22,13 +22,14 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
-exports_files(
-    [
-        "rustfmt.toml",
-        "aspect.bzl",
-    ],
-    visibility = ["//visibility:public"],
+package(
+    default_visibility = ["//visibility:public"],
 )
+
+exports_files([
+    "rustfmt.toml",
+    "aspect.bzl",
+])
 
 rust_library(
     name = "library",
