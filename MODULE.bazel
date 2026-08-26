@@ -27,6 +27,15 @@ module(
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_rust", version = "0.73.0")
 bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "violet", version = "26.07.03")
+archive_override(
+    module_name = "violet",
+    integrity = "sha256-iH1sAlXANCIWd6RSBOFEfdkk58J0mljOADgmbA0GpVc=",
+    urls = [
+        # "https://artifacts.noelware.org/bazel-registry/violet/26.07.03/bazeldist.tgz",
+        "https://github.com/Noelware/violet/releases/download/26.07.03/bazeldist.tgz",
+    ],
+)
 
 _RUST_VERSION = "2026-08-25"
 

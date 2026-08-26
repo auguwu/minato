@@ -1,5 +1,5 @@
 {
-  "checksum": "ea237de6050f44cf85c99aba2f8840b56f1418fcd5339bb29cb20e6fd4b89a93",
+  "checksum": "ae045797d29c30782c7b31350fd8a1c7bc84565c6f7ca4c2e32a598e675d6406",
   "crates": {
     "addr2line 0.25.1": {
       "name": "addr2line",
@@ -685,7 +685,7 @@
               "target": "color_spantrace"
             },
             {
-              "id": "eyre 0.6.12",
+              "id": "eyre 0.6.14",
               "target": "eyre"
             },
             {
@@ -1070,14 +1070,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "eyre 0.6.12": {
+    "eyre 0.6.14": {
       "name": "eyre",
-      "version": "0.6.12",
+      "version": "0.6.14",
       "package_url": "https://github.com/eyre-rs/eyre",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/eyre/0.6.12/download",
-          "sha256": "7cd915d99f24784cdc19fd37ef22b97e3ff0ae756c7e492e9fbfe897d61e2aec"
+          "url": "https://static.crates.io/crates/eyre/0.6.14/download",
+          "sha256": "c08309dbcc659c5549a24ddb9b27027640641b282ef5768267c7e675558986a3"
         }
       },
       "targets": [
@@ -1139,7 +1139,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.12"
+        "version": "0.6.14"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -1150,7 +1150,16 @@
         ],
         "data_glob": [
           "**"
-        ]
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.5.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -4420,7 +4429,7 @@
               "target": "dunce"
             },
             {
-              "id": "eyre 0.6.12",
+              "id": "eyre 0.6.14",
               "target": "eyre"
             },
             {
@@ -4444,7 +4453,7 @@
               "target": "tempfile"
             },
             {
-              "id": "tokio 1.52.3",
+              "id": "tokio 1.53.1",
               "target": "tokio"
             },
             {
@@ -4456,7 +4465,7 @@
               "target": "tracing_subscriber"
             },
             {
-              "id": "which 8.0.4",
+              "id": "which 8.0.5",
               "target": "which"
             }
           ],
@@ -6861,14 +6870,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio 1.52.3": {
+    "tokio 1.53.1": {
       "name": "tokio",
-      "version": "1.52.3",
+      "version": "1.53.1",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio/1.52.3/download",
-          "sha256": "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+          "url": "https://static.crates.io/crates/tokio/1.53.1/download",
+          "sha256": "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
         }
       },
       "targets": [
@@ -6991,7 +7000,7 @@
           ],
           "selects": {}
         },
-        "version": "1.52.3"
+        "version": "1.53.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -8211,14 +8220,14 @@
       ],
       "license_file": null
     },
-    "which 8.0.4": {
+    "which 8.0.5": {
       "name": "which",
-      "version": "8.0.4",
+      "version": "8.0.5",
       "package_url": "https://github.com/harryfei/which-rs.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/which/8.0.4/download",
-          "sha256": "48d7cd18d4acb58fb3cdfe9ea54e6cd96a4e7d4cc45c56338b236e82dad47248"
+          "url": "https://static.crates.io/crates/which/8.0.5/download",
+          "sha256": "8f3ef584124b911bcc3875c2f1472e80f24361ceb789bd1c62b3e9a3df9ff43c"
         }
       },
       "targets": [
@@ -8283,7 +8292,7 @@
           }
         },
         "edition": "2021",
-        "version": "8.0.4"
+        "version": "8.0.5"
       },
       "license": "MIT",
       "license_ids": [
@@ -9623,16 +9632,16 @@
   "direct_deps": [
     "color-eyre 0.6.5",
     "dunce 1.0.5",
-    "eyre 0.6.12",
+    "eyre 0.6.14",
     "facet 0.46.5",
     "facet-json 0.46.1",
     "figue 4.0.5",
     "is_executable 1.0.6",
     "tempfile 3.27.0",
-    "tokio 1.52.3",
+    "tokio 1.53.1",
     "tracing 0.1.44",
     "tracing-subscriber 0.3.23",
-    "which 8.0.4"
+    "which 8.0.5"
   ],
   "direct_dev_deps": [],
   "unused_patches": []

@@ -89,7 +89,7 @@ cc_binary(
         ],
         "@rules_cc//cc/compiler:clang": [
             "-fdiagnostics-color=always",
-            "-std=c++20",
+            "-std=c++26",
             "-Wall",
             "-Wextra",
             "-Wpedantic",
@@ -112,7 +112,7 @@ cc_binary(
         ],
         "@rules_cc//cc/compiler:gcc": [
             "-fdiagnostics-color=always",
-            "-std=c++20",
+            "-std=c++26",
             "-Wall",
             "-Wextra",
             "-Wpedantic",
@@ -130,5 +130,17 @@ cc_binary(
     }),
     data = [":minato"],
     visibility = [":__pkg__"],
-    deps = ["@rules_cc//cc/runfiles"],
+    deps = ["@rules_cc//cc/runfiles"] + select({
+        "@platforms//os:linux": [
+            "@violet//violet:print",
+            "@violet//violet/filesystem",
+            "@violet//violet/subprocess",
+        ],
+        "@platforms//os:macos": [
+            "@violet//violet:print",
+            "@violet//violet/filesystem",
+            "@violet//violet/subprocess",
+        ],
+        "//conditions:default": [],
+    }),
 )

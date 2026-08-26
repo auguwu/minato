@@ -32,6 +32,16 @@ test:ci --test_output=all
 common:ci --noshow_progress
 common:ci --verbose_failures
 
+# C++-related stuff
+build:linux --cxxopt=-Wno-unused-command-line-argument
+build:macos --cxxopt=-Wno-unused-command-line-argument
+build:linux --host_cxxopt=-Wno-unused-command-line-argument
+build:macos --host_cxxopt=-Wno-unused-command-line-argument
+build:linux --cxxopt=-std=c++26
+build:linux --host_cxxopt=-std=c++26
+build:macos --cxxopt=-std=c++26
+build:macos --host_cxxopt=-std=c++26
+
 ## Rust
 ### Use Bazel's C++ toolchain as the linker for Rust targets instead of relying
 ### on a system linker being available in the sandbox (fixes macOS linker errors).

@@ -21,83 +21,42 @@
 
 #include "rules_cc/cc/runfiles/runfiles.h"
 
-#include <array>
-#include <cstdlib>
-#include <cstring>
-#include <format>
-#include <iostream>
-#include <string>
-#include <utility>
-#include <vector>
+#include <violet/Filesystem.h>
+#include <violet/Print.h>
+#include <violet/Subprocess.h>
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
+using namespace rules_cc::cc::runfiles;
+using namespace violet;
+namespace fs = violet::filesystem;
 
-#if defined(__has_include) && __has_include(<TargetConditionals.h>)
-#include <TargetConditionals.h>
+constexpr static Array<Str, 3> kPossibleLocations = {
+    // clang-format off
+    "_main/minato",
+    "minato/minato",
+    "minato+/minato",
+    // clang-format on
+};
 
-#if TARGET_OS_MAC && TARGET_OS_OSX
-#ifndef APPLE_MACOS
-#define APPLE_MACOS 1
-#endif
-#endif
-#else
-#define APPLE_MACOS 0
-#endif
-
-constexpr static std::array<const char*, 3> kPossibleLocations = { "_main/minato", "minato/minato", "minato+/minato" };
-
-namespace {
-
-auto tryExists(const std::string& path) -> std::pair<bool, int>
+auto main(Int32 argc, char** argv) -> Int32
 {
-#if APPLE_MACOS
-#define O_PATH O_RDONLY
-#endif
-
-    auto fd = ::open(path.c_str(), O_PATH | O_NOFOLLOW);
-    if (fd == -1) {
-        if (errno == ENOENT) {
-            return std::make_pair(false, 0);
-        }
-
-        return std::make_pair(false, errno);
-    }
-
-    struct stat st{ };
-    if (::fstat(fd, &st) < 0) {
-        return std::make_pair(false, errno);
-    }
-
-    return { true, 0 };
-}
-
-} // namespace
-
-#define eprintln(fmt, ...) ::std::cerr << ::std::format(fmt __VA_OPT__(, ) __VA_ARGS__) << '\n'
-#define println(fmt, ...) ::std::cout << ::std::format(fmt __VA_OPT__(, ) __VA_ARGS__) << '\n'
-
-auto main(int argc, char** argv) -> int
-{
-    std::string error;
-    auto* runfiles = rules_cc::cc::runfiles::Runfiles::Create(argv[0], &error);
+    String error;
+    auto* runfiles = Runfiles::Create(argv[0], &error);
     if (!error.empty()) {
-        eprintln("failed to create runfiles: {}", error);
+        violet::PrintErrln("failed to create runfiles: {}", error);
         return 1;
     }
 
-    std::string minato;
-    for (const auto* possible: kPossibleLocations) {
-        auto found = runfiles->Rlocation(possible);
+    String minato;
+    for (auto possible: kPossibleLocations) {
+        auto found = runfiles->Rlocation({possible.data()});
         if (!found.empty()) {
-            auto [doesExist, error] = tryExists(found);
-            if (!doesExist && error != 0) {
-                eprintln("warning: failed to probe file [{}]: {}", found, ::strerror(error));
+            auto result = fs::TryExists({found.data()});
+            if (result.Err()) {
+                violet::PrintErrln("warning: failed to probe file [{}]: {}", found, result.Error());
                 continue;
             }
 
-            if (doesExist) {
+            if (*result) {
                 minato = found;
                 break;
             }
@@ -105,41 +64,36 @@ auto main(int argc, char** argv) -> int
     }
 
     if (minato.empty()) {
-        eprintln("failed to find `minato` binary from runfiles");
+        violet::PrintErrln("failed to find `minato` binary from runfiles");
         return 1;
     }
 
-    // Set runfiles environment variables
+    auto cmd = subprocess::Command(minato);
     for (const auto& [key, value]: runfiles->EnvVars()) {
-        ::setenv(key.c_str(), value.c_str(), 1);
+        cmd = cmd.WithEnv(key, value);
     }
 
-    std::vector<char*> fwdArgs;
-
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-    fwdArgs.push_back(const_cast<char*>(minato.c_str()));
-
-    for (int i = 1; i < argc; ++i) {
-        std::string arg(argv[i]);
+    for (Int32 i = 1; i < argc; ++i) {
+        const Str arg(argv[i]);
         if (arg.starts_with("--env=")) {
-            auto kv = arg.substr(6); // "--env="
+            auto kv = arg.substr(6);
             auto eq = kv.find('=');
-            if (eq == std::string::npos) {
-                eprintln("malformed `--env` flag: {}", arg);
+            if (eq == Str::npos) {
+                violet::PrintErrln("malformed `--env` flag: {}", arg);
                 return 1;
             }
 
-            auto key = kv.substr(0, eq);
-            auto value = kv.substr(eq + 1);
-            ::setenv(key.c_str(), value.c_str(), 1);
+            cmd = cmd.WithEnv(kv.substr(0, eq), kv.substr(eq + 1));
         } else {
-            fwdArgs.push_back(argv[i]);
+            cmd = cmd.WithArg(arg);
         }
     }
 
-    fwdArgs.push_back(nullptr);
-    ::execv(minato.c_str(), fwdArgs.data());
+    auto status = cmd.Status();
+    if (status.Err()) {
+        violet::PrintErrln("failed to exec minato: {}", status.Error());
+        return 1;
+    }
 
-    eprintln("failed to exec minato: {}", ::strerror(errno));
-    return 1;
+    return status->AsNative();
 }

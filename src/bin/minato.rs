@@ -48,7 +48,7 @@ struct Args {
     builtins: args::FigueBuiltins,
 }
 
-fn main() -> eyre::Result<()> {
+fn main() -> eyre::Result {
     tracing_subscriber::fmt()
         .compact()
         .with_env_filter(
@@ -107,7 +107,7 @@ async fn real_main(
         unsafe_aspect_file,
         ..
     }: Args,
-) -> eyre::Result<()> {
+) -> eyre::Result {
     let compdb = minato::extract(targets.as_slice(), unsafe_aspect_file).await?;
     if print {
         let mut stdout = std::io::stdout().lock();

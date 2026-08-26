@@ -34,13 +34,13 @@ path = "src/bin/minato.rs"
 [dependencies]
 color-eyre = { version = "0.6.5", features = ["issue-url"] }
 dunce = "1.0.5"
-eyre = "0.6.12"
+eyre = "0.6.14"
 facet = "0.46.0"
 facet-json = "0.46.0"
 figue = "4.0.0"
 is_executable = "1.0.5"
 tempfile = "3.27.0"
-tokio = { version = "1.50.0", features = [
+tokio = { version = "1.53.1", features = [
     "signal",
     "rt",
     "process",
@@ -50,7 +50,7 @@ tokio = { version = "1.50.0", features = [
 ] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-which = "8.0.2"
+which = "8.0.5"
 
 [profile.release]
 codegen-units = 1 # use a single codegen unit

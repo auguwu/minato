@@ -70,7 +70,19 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
             "@platforms//os:windows": ["@minato//tools/wrapper:windows.cc"],
         }),
         data = ["@minato"],
-        deps = ["@rules_cc//cc/runfiles"],
+        deps = ["@rules_cc//cc/runfiles"] + select({
+            "@platforms//os:linux": [
+                "@violet//violet:print",
+                "@violet//violet/subprocess",
+                "@violet//violet/filesystem",
+            ],
+            "@platforms//os:macos": [
+                "@violet//violet:print",
+                "@violet//violet/subprocess",
+                "@violet//violet/filesystem",
+            ],
+            "//conditions:default": [],
+        }),
         args = all_args,
         copts = select({
             "@rules_cc//cc/compiler:msvc-cl": [
