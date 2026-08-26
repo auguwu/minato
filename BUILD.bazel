@@ -89,7 +89,7 @@ cc_binary(
         ],
         "@rules_cc//cc/compiler:clang": [
             "-fdiagnostics-color=always",
-            "-std=c++26",
+            "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Wpedantic",
@@ -112,7 +112,7 @@ cc_binary(
         ],
         "@rules_cc//cc/compiler:gcc": [
             "-fdiagnostics-color=always",
-            "-std=c++26",
+            "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Wpedantic",
