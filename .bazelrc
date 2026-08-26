@@ -37,10 +37,10 @@ build:linux --cxxopt=-Wno-unused-command-line-argument
 build:macos --cxxopt=-Wno-unused-command-line-argument
 build:linux --host_cxxopt=-Wno-unused-command-line-argument
 build:macos --host_cxxopt=-Wno-unused-command-line-argument
-build:linux --cxxopt=-std=c++26
-build:linux --host_cxxopt=-std=c++26
-build:macos --cxxopt=-std=c++26
-build:macos --host_cxxopt=-std=c++26
+build:linux --cxxopt=-std=c++20
+build:linux --host_cxxopt=-std=c++20
+build:macos --cxxopt=-std=c++20
+build:macos --host_cxxopt=-std=c++20
 
 ## Rust
 ### Use Bazel's C++ toolchain as the linker for Rust targets instead of relying
