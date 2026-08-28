@@ -32,6 +32,9 @@ Load this file in your BUILD.bazel:
 
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
+def _violet(x):
+    return Label("@violet//violet%s" % x)
+
 def minato(name, targets = [], args = [], env = {}, visibility = []):
     """Defines a runnable target that invokes the Minato binary.
 
@@ -72,14 +75,14 @@ def minato(name, targets = [], args = [], env = {}, visibility = []):
         data = ["@minato"],
         deps = ["@rules_cc//cc/runfiles"] + select({
             "@platforms//os:linux": [
-                "@violet//violet:print",
-                "@violet//violet/subprocess",
-                "@violet//violet/filesystem",
+                _violet(":print"),
+                _violet("/subprocess"),
+                _violet("/filesystem"),
             ],
             "@platforms//os:macos": [
-                "@violet//violet:print",
-                "@violet//violet/subprocess",
-                "@violet//violet/filesystem",
+                _violet(":print"),
+                _violet("/subprocess"),
+                _violet("/filesystem"),
             ],
             "//conditions:default": [],
         }),
